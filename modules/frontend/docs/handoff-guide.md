@@ -31,6 +31,20 @@ npm run dev
 http://127.0.0.1:5173/
 ```
 
+手机扫码体验：
+
+```text
+http://172.29.127.87:5173/
+```
+
+二维码图片：
+
+```text
+modules/frontend/docs/assets/eati-mobile-qr.png
+```
+
+注意：手机需要和这台电脑在同一个局域网或同一个 Wi-Fi 下；如果扫不出来，先确认本地服务是用 `npm run dev -- --host 0.0.0.0 --port 5173` 启动的。
+
 如果需要确认生产构建：
 
 ```bash

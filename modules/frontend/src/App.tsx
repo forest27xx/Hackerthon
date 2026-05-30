@@ -720,15 +720,15 @@ function App() {
                   <div>
                     <strong>¥{payablePrice}</strong>
                     <span>{couponDiscount > 0 ? `券减¥${couponDiscount} · ` : ""}钱包剩余¥{walletRemaining >= 0 ? walletRemaining : 0}</span>
-                    <div className="cart-boosts">
-                      {cartBoosts.map((boost) => (
-                        <em key={boost.label}>{boost.label} {formatSigned(boost.value)}</em>
-                      ))}
-                    </div>
                   </div>
                 </div>
                 <ChevronDown className={isCartOpen ? "expanded" : ""} size={18} />
               </button>
+              <div className="cart-boosts" aria-label="订单指标">
+                {cartBoosts.map((boost) => (
+                  <em key={boost.label}>{boost.label} {formatSigned(boost.value)}</em>
+                ))}
+              </div>
               <button className="checkout-button" type="button" onClick={startDelivery} disabled={!walletCanPay}>
                 {cart.length > 0 && !walletCanPay ? "余额不足" : "下单"}
               </button>

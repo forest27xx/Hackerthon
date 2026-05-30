@@ -946,7 +946,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 7px;
   min-height: 62px;
   padding: 6px 8px;
   border-radius: 8px;
@@ -959,7 +959,7 @@ button {
 
 .cart-toggle {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 160px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1042,10 +1042,10 @@ button {
 }
 
 .cart-boosts {
+  flex: 1 1 118px;
   display: flex;
   flex-wrap: nowrap;
   gap: 4px;
-  margin-top: 3px;
   min-width: 0;
 }
 

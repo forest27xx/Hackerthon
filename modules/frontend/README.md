@@ -4,6 +4,8 @@
 
 完整交接说明见：[docs/handoff-guide.md](docs/handoff-guide.md)。
 
+手机扫码体验二维码见：[docs/assets/eati-mobile-qr.png](docs/assets/eati-mobile-qr.png)。
+
 ## 快速启动
 
 ```bash
