@@ -5,7 +5,10 @@ export type Category =
   | "snack"
   | "nightFood"
   | "lightFood"
-  | "activity";
+  | "staple"
+  | "stirFry"
+  | "soupPot"
+  | "other";
 
 export type Mood =
   | "tired"

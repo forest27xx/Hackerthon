@@ -11,7 +11,6 @@ import {
   CupSoda,
   Download,
   Flame,
-  Gamepad2,
   HeartPulse,
   Megaphone,
   Plus,
@@ -76,7 +75,10 @@ const categoryVisuals: Record<Category, { icon: LucideIcon; accent: string }> = 
   snack: { icon: Flame, accent: "#ff4c2e" },
   nightFood: { icon: Soup, accent: "#d9781f" },
   lightFood: { icon: Salad, accent: "#26a269" },
-  activity: { icon: Gamepad2, accent: "#4b7bec" }
+  staple: { icon: Utensils, accent: "#c05a28" },
+  stirFry: { icon: Flame, accent: "#d93f25" },
+  soupPot: { icon: Soup, accent: "#b65e20" },
+  other: { icon: ShoppingBag, accent: "#4b7bec" }
 };
 
 const purposeIcons: Record<Mood, string> = {
