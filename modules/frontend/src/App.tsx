@@ -5,6 +5,7 @@ import {
   Bike,
   CakeSlice,
   Check,
+  ChevronDown,
   ChevronLeft,
   Clipboard,
   Coffee,
@@ -22,10 +23,21 @@ import {
   Soup,
   Sparkles,
   Tags,
+  TicketPercent,
   Utensils,
+  WalletCards,
   type LucideIcon
 } from "lucide-react";
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type TouchEvent as ReactTouchEvent,
+  type UIEvent as ReactUIEvent,
+  type WheelEvent as ReactWheelEvent
+} from "react";
 import { categories, comboRules, deliveryEvents, menuItems, moods } from "./data/catalog";
 import {
   applyComboBonuses,
@@ -34,6 +46,7 @@ import {
   computeOrderTotals,
   generateResultSummary,
   getDefaultChoices,
+  getSelectedOptionChoices,
   initialDeliveryScore,
   pickDeliveryEvents
 } from "./lib/gameEngine";
@@ -111,11 +124,111 @@ const getProductBadge = (item: MenuItem, index: number) => {
   return "今日可点";
 };
 
+type Coupon = {
+  id: string;
+  label: string;
+  threshold: number;
+  discount: number;
+  description: string;
+};
+
+const walletLimit = 150;
+
+const coupons: Coupon[] = [
+  { id: "c39", label: "满39减5", threshold: 39, discount: 5, description: "轻量可用" },
+  { id: "c59", label: "满59减10", threshold: 59, discount: 10, description: "饭饮刚好" },
+  { id: "c89", label: "满89减18", threshold: 89, discount: 18, description: "拼单省钱" },
+  { id: "c129", label: "满129减28", threshold: 129, discount: 28, description: "聚餐红包" }
+];
+
+type MealPreset = {
+  id: string;
+  name: string;
+  line: string;
+  moods: Mood[];
+  tags: string[];
+  itemNames: string[];
+};
+
+const mealPresets: MealPreset[] = [
+  { id: "work-luck", name: "加班幸运包", line: "咖啡 + 主食 + 蛋白", moods: ["overtime", "tired"], tags: ["caffeine", "fullness", "protein"], itemNames: ["冰美式续命杯", "黑椒牛柳意面", "卤味溏心蛋"] },
+  { id: "low-carb", name: "低碳自律局", line: "高蛋白 + 低糖 + 清爽", moods: ["afterWorkout", "slacking"], tags: ["protein", "lowSugar", "healthy"], itemNames: ["鸡胸藜麦碗", "无糖气泡水", "低糖水果盒"] },
+  { id: "friday-free", name: "周五放纵套餐", line: "热辣 + 炸物 + 大杯饮", moods: ["crazy", "celebration"], tags: ["spicy", "fried", "party"], itemNames: ["麻辣烫小锅", "盐酥鸡", "多肉葡萄芝士"] },
+  { id: "night-soft", name: "深夜回血包", line: "热汤 + 软食 + 热饮", moods: ["lateNight", "emo"], tags: ["warm", "comfort", "healthy"], itemNames: ["砂锅粥", "鲜肉云吞汤", "豆浆"] },
+  { id: "date-safe", name: "约会不翻车", line: "好看 + 好分 + 不脏手", moods: ["date"], tags: ["share", "safe", "fruit"], itemNames: ["杨枝甘露", "草莓奶油可颂", "鲜切水果杯"] },
+  { id: "hungry-base", name: "干饭安心包", line: "主食 + 家常菜 + 果饮", moods: ["hungry"], tags: ["fullness", "safe", "refresh"], itemNames: ["台式卤肉饭", "番茄炒蛋", "鲜榨橙汁"] }
+];
+
+const tagLabels: Record<string, string> = {
+  afterWorkout: "运动补给",
+  bold: "重口尝鲜",
+  caffeine: "咖啡因",
+  cheese: "芝士",
+  chewy: "糯叽叽",
+  combo: "可搭配",
+  comfort: "治愈系",
+  energy: "补能",
+  fried: "酥脆",
+  fruit: "果香",
+  fullness: "饱腹",
+  fun: "趣味",
+  healthy: "健康",
+  healthyNote: "少油盐",
+  lateNight: "夜宵",
+  light: "轻负担",
+  lowSugar: "低糖",
+  milkTea: "奶茶",
+  overtime: "续命",
+  party: "聚会",
+  protein: "高蛋白",
+  refresh: "清爽",
+  safe: "稳妥",
+  separatePack: "分装",
+  share: "适合分享",
+  slacking: "摸鱼",
+  social: "社交",
+  spicy: "辣味",
+  sweet: "甜口",
+  warm: "热乎"
+};
+
+const getTagLabel = (tag: string) => tagLabels[tag] ?? tag;
+
+const getEntryUnitPrice = (entry: CartEntry) =>
+  entry.item.price + getSelectedOptionChoices(entry).reduce((sum, choice) => sum + (choice.priceDelta ?? 0), 0);
+
+const getEntrySubtotal = (entry: CartEntry) => getEntryUnitPrice(entry) * entry.quantity;
+
+const defaultChoiceLabels = new Set(["按商品默认", "默认口味", "默认奶基", "默认汤底", "标准酱", "标准甜", "正常冰", "标准份", "标准杯", "中杯", "单人份", "单份", "单人小锅"]);
+
+const getEntryOptionSummary = (entry: CartEntry) =>
+  getSelectedOptionChoices(entry)
+    .map((choice) => choice.label)
+    .filter((label) => !defaultChoiceLabels.has(label))
+    .join(" / ");
+
+const getBestCoupon = (availableCoupons: Coupon[]) =>
+  availableCoupons.reduce<Coupon | null>((best, coupon) => (!best || coupon.discount > best.discount ? coupon : best), null);
+
+const isTargetInsideCartDrawer = (target: EventTarget | null) =>
+  target instanceof Element && Boolean(target.closest(".cart-drawer"));
+
+const getMealPresetItems = (preset: MealPreset) =>
+  preset.itemNames
+    .map((name) => menuItems.find((item) => item.name === name))
+    .filter((item): item is MenuItem => Boolean(item));
+
+const getPresetPrice = (items: MenuItem[]) => items.reduce((sum, item) => sum + item.price, 0);
+
 function App() {
   const [stage, setStage] = useState<Stage>("mood");
   const [mood, setMood] = useState<Mood>(moodDefault);
   const [activeCategory, setActiveCategory] = useState<Category>("milkTea");
   const [cart, setCart] = useState<CartEntry[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCouponOpen, setIsCouponOpen] = useState(false);
+  const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
+  const [couponBoost, setCouponBoost] = useState<{ couponId: string; bonus: number } | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [draftChoices, setDraftChoices] = useState<Record<string, string[]>>({});
   const [route, setRoute] = useState<DeliveryEvent[]>([]);
@@ -123,16 +236,43 @@ function App() {
   const [deliveryScore, setDeliveryScore] = useState<DeliveryScore>(initialDeliveryScore);
   const [selectedEvents, setSelectedEvents] = useState<{ event: DeliveryEvent; choice: DeliveryChoice }[]>([]);
   const resultRef = useRef<HTMLDivElement | null>(null);
+  const orderScrollTopRef = useRef(0);
+  const touchStartYRef = useRef(0);
+  const touchStartedInCartDrawerRef = useRef(false);
 
   const visibleItems = useMemo(() => menuItems.filter((item) => item.category === activeCategory), [activeCategory]);
   const totals = useMemo(() => computeOrderTotals(cart), [cart]);
+  const boostedCoupons = useMemo(
+    () =>
+      coupons.map((coupon) =>
+        coupon.id === couponBoost?.couponId
+          ? { ...coupon, discount: coupon.discount + couponBoost.bonus, description: `神券+${couponBoost.bonus}` }
+          : coupon
+      ),
+    [couponBoost]
+  );
+  const availableCoupons = useMemo(() => boostedCoupons.filter((coupon) => totals.price >= coupon.threshold), [boostedCoupons, totals.price]);
+  const nextCoupon = useMemo(() => boostedCoupons.find((coupon) => totals.price < coupon.threshold), [boostedCoupons, totals.price]);
+  const bestCoupon = useMemo(() => getBestCoupon(availableCoupons), [availableCoupons]);
+  const selectedCoupon = useMemo(
+    () => availableCoupons.find((coupon) => coupon.id === selectedCouponId) ?? bestCoupon,
+    [availableCoupons, bestCoupon, selectedCouponId]
+  );
+  const boostTargetCoupon = useMemo(
+    () => boostedCoupons.find((coupon) => coupon.id === (selectedCouponId ?? selectedCoupon?.id)) ?? selectedCoupon ?? boostedCoupons[0],
+    [boostedCoupons, selectedCoupon, selectedCouponId]
+  );
+  const couponDiscount = selectedCoupon?.discount ?? 0;
+  const payablePrice = Math.max(0, totals.price - couponDiscount);
+  const walletRemaining = walletLimit - payablePrice;
+  const walletCanPay = cart.length > 0 && walletRemaining >= 0;
   const combos = useMemo(() => computeActiveCombos(cart, comboRules, mood), [cart, mood]);
   const statsWithCombo = useMemo(() => applyComboBonuses(totals.stats, combos), [totals.stats, combos]);
   const summary = useMemo(
     () =>
       generateResultSummary({
         mood,
-        totals: { price: totals.price, stats: totals.stats },
+        totals: { price: payablePrice, stats: totals.stats },
         combos,
         deliveryScore,
         selectedEventTitles: selectedEvents.map(({ event }) => event.title),
@@ -143,7 +283,7 @@ function App() {
         })),
         entries: cart
       }),
-    [cart, combos, deliveryScore, mood, selectedEvents, totals.price, totals.stats]
+    [cart, combos, deliveryScore, mood, payablePrice, selectedEvents, totals.stats]
   );
 
   const missingImages = useMemo(() => missingLocalImageKeys(menuItems).length, []);
@@ -155,14 +295,33 @@ function App() {
     { key: "health", label: "健康值", value: clampMeter(55 + statsWithCombo.health), icon: HeartPulse, tone: "red" },
     { key: "safety", label: "安全值", value: clampMeter(58 + statsWithCombo.safety), icon: ShieldCheck, tone: "blue" }
   ];
-  const cartDiscount = cartCount >= 3 ? 6 : cartCount >= 2 ? 3 : 0;
-  const payablePrice = Math.max(0, totals.price - cartDiscount);
+  const recommendedPresets = useMemo(
+    () =>
+      mealPresets
+        .map((preset) => {
+          const items = getMealPresetItems(preset);
+          const price = getPresetPrice(items);
+          const presetCoupon = getBestCoupon(boostedCoupons.filter((coupon) => price >= coupon.threshold));
+          const tagScore = preset.tags.filter((tag) => activeMood.recommendedTags.includes(tag)).length;
+          const moodScore = preset.moods.includes(mood) ? 100 : 0;
+          return { preset, items, price, presetCoupon, payable: Math.max(0, price - (presetCoupon?.discount ?? 0)), score: moodScore + tagScore * 14 + price / 10 };
+        })
+        .filter(({ items }) => items.length > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3),
+    [activeMood.recommendedTags, boostedCoupons, mood]
+  );
   const cartBoosts = [
     { label: "快乐", value: Math.max(0, Math.round(statsWithCombo.joy)) },
     { label: "健康", value: Math.round(statsWithCombo.health) },
     { label: "安全", value: Math.round(statsWithCombo.safety) }
   ];
   const featuredResultImage = cart[0] ? resolveMenuImage(cart[0].item) : resolveMenuImage(menuItems[0]);
+
+  const closeDrawers = () => {
+    setIsCartOpen(false);
+    setIsCouponOpen(false);
+  };
 
   const chooseMood = (nextMood: Mood) => {
     setMood(nextMood);
@@ -193,6 +352,30 @@ function App() {
       }
       return [...current, { item, quantity: 1, selectedChoices }];
     });
+    setIsCartOpen(true);
+    setIsCouponOpen(false);
+  };
+
+  const addPresetToCart = (preset: MealPreset) => {
+    const presetItems = getMealPresetItems(preset);
+    if (presetItems.length === 0) return;
+
+    setCart((current) => {
+      const next = [...current];
+      presetItems.forEach((item) => {
+        const selectedChoices = getDefaultChoices(item);
+        const key = JSON.stringify(selectedChoices);
+        const existingIndex = next.findIndex((entry) => entry.item.id === item.id && JSON.stringify(entry.selectedChoices) === key);
+        if (existingIndex >= 0) {
+          next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + 1 };
+        } else {
+          next.push({ item, quantity: 1, selectedChoices });
+        }
+      });
+      return next;
+    });
+    setIsCartOpen(true);
+    setIsCouponOpen(false);
   };
 
   const adjustQuantity = (index: number, delta: number) => {
@@ -210,7 +393,8 @@ function App() {
   };
 
   const startDelivery = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !walletCanPay) return;
+    closeDrawers();
     const eventCount = Math.min(5, Math.max(3, Math.ceil(cartCount / 2)));
     setRoute(pickDeliveryEvents(deliveryEvents, eventCount, createSeed(mood, cart)));
     setDeliveryScore(initialDeliveryScore);
@@ -246,15 +430,101 @@ function App() {
   const restart = () => {
     setStage("mood");
     setCart([]);
+    closeDrawers();
+    setSelectedCouponId(null);
+    setCouponBoost(null);
     setRoute([]);
     setSelectedEvents([]);
     setDeliveryScore(initialDeliveryScore);
     setEventIndex(0);
   };
 
+  const toggleCartDrawer = () => {
+    if (cart.length === 0) return;
+    setIsCartOpen((open) => !open);
+    setIsCouponOpen(false);
+  };
+
+  const toggleCouponDrawer = () => {
+    setIsCouponOpen((open) => !open);
+    setIsCartOpen(true);
+  };
+
+  const inflateCoupon = () => {
+    const targetCoupon = boostTargetCoupon ?? boostedCoupons[0];
+    const bonus = Math.floor(Math.random() * 8) + 3;
+    setCouponBoost({ couponId: targetCoupon.id, bonus });
+    setSelectedCouponId(targetCoupon.id);
+  };
+
+  const handleOrderScroll = (event: ReactUIEvent<HTMLElement>) => {
+    if (isTargetInsideCartDrawer(event.target)) return;
+    const nextScrollTop = event.currentTarget.scrollTop;
+    if (nextScrollTop > orderScrollTopRef.current + 6) {
+      closeDrawers();
+    }
+    orderScrollTopRef.current = nextScrollTop;
+  };
+
+  const handleOrderWheel = (event: ReactWheelEvent<HTMLElement>) => {
+    if (isTargetInsideCartDrawer(event.target)) return;
+    if (event.deltaY > 4) {
+      closeDrawers();
+    }
+  };
+
+  const handleOrderTouchStart = (event: ReactTouchEvent<HTMLElement>) => {
+    touchStartYRef.current = event.touches[0]?.clientY ?? 0;
+    touchStartedInCartDrawerRef.current = isTargetInsideCartDrawer(event.target);
+  };
+
+  const handleOrderTouchMove = (event: ReactTouchEvent<HTMLElement>) => {
+    if (touchStartedInCartDrawerRef.current || isTargetInsideCartDrawer(event.target)) return;
+    const currentY = event.touches[0]?.clientY ?? touchStartYRef.current;
+    if (touchStartYRef.current - currentY > 6) {
+      closeDrawers();
+    }
+  };
+
+  useEffect(() => {
+    if (stage !== "order" || (!isCartOpen && !isCouponOpen)) return;
+
+    let touchStartY = 0;
+    let touchStartedInCartDrawer = false;
+    const closeOnWheel = (event: globalThis.WheelEvent) => {
+      if (isTargetInsideCartDrawer(event.target)) return;
+      if (event.deltaY > 4) closeDrawers();
+    };
+    const trackTouchStart = (event: globalThis.TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? 0;
+      touchStartedInCartDrawer = isTargetInsideCartDrawer(event.target);
+    };
+    const closeOnTouchMove = (event: globalThis.TouchEvent) => {
+      if (touchStartedInCartDrawer || isTargetInsideCartDrawer(event.target)) return;
+      const currentY = event.touches[0]?.clientY ?? touchStartY;
+      if (touchStartY - currentY > 6) closeDrawers();
+    };
+    const closeOnScroll = (event: globalThis.Event) => {
+      if (isTargetInsideCartDrawer(event.target)) return;
+      closeDrawers();
+    };
+
+    document.addEventListener("wheel", closeOnWheel, { passive: true, capture: true });
+    document.addEventListener("touchstart", trackTouchStart, { passive: true, capture: true });
+    document.addEventListener("touchmove", closeOnTouchMove, { passive: true, capture: true });
+    document.addEventListener("scroll", closeOnScroll, { passive: true, capture: true });
+
+    return () => {
+      document.removeEventListener("wheel", closeOnWheel, { capture: true });
+      document.removeEventListener("touchstart", trackTouchStart, { capture: true });
+      document.removeEventListener("touchmove", closeOnTouchMove, { capture: true });
+      document.removeEventListener("scroll", closeOnScroll, { capture: true });
+    };
+  }, [isCartOpen, isCouponOpen, stage]);
+
   return (
     <main className="page-shell">
-      <section className="phone-frame" aria-label="快乐下单事务所">
+      <section className="phone-frame" aria-label="今天你吃商几级">
         <header className="app-header">
           {stage !== "mood" ? (
             <button className="icon-button" type="button" onClick={() => (stage === "order" ? setStage("mood") : setStage("order"))} aria-label="返回">
@@ -264,8 +534,8 @@ function App() {
             <span className="brand-dot" />
           )}
           <div>
-            <h1>快乐下单事务所</h1>
-            <p>{stage === "delivery" ? "订单路上处理中" : stage === "result" ? "快乐订单已生成" : "选择今日下单目的"}</p>
+            <h1>今天你吃商几级？</h1>
+            <p>{stage === "delivery" ? "外卖配送选择中" : stage === "result" ? "真实 MBTI 已生成" : "点一单，看穿你的吃商人格"}</p>
           </div>
           <div className="header-score">
             <Sparkles size={16} />
@@ -277,12 +547,12 @@ function App() {
           <section className="mood-screen">
             <div className="intro-panel">
               <div className="intro-copy">
-                <h2>今天为什么下单？</h2>
-                <p>先选择今日下单目的，它会成为美食人格判断的第一层线索，后续点单、备注和互动选择都会继续加权。</p>
+                <h2>今天你吃商几级？</h2>
+                <p>先选择今日下单动机，再完成点单。外卖员配送途中会出现不同时间点的选择题，你的反应会继续推导真实 MBTI 性格。</p>
               </div>
               <div className="mini-receipt">
                 <ReceiptText size={22} />
-                <span>这不是普通购物车，是一张记录今日快乐动机的小纸条。</span>
+                <span>从点单偏好到配送选择，生成你的吃商等级和真实 MBTI。</span>
               </div>
             </div>
             <div className="mood-grid">
@@ -298,7 +568,7 @@ function App() {
         )}
 
         {stage === "order" && (
-          <section className="order-screen">
+          <section className="order-screen" onScroll={handleOrderScroll} onWheel={handleOrderWheel} onTouchStart={handleOrderTouchStart} onTouchMove={handleOrderTouchMove}>
             <div className="order-hero">
               <div className="mascot-card">
                 <div className="mascot-avatar">单</div>
@@ -331,21 +601,54 @@ function App() {
               <button type="button" onClick={() => setStage("mood")}>更换</button>
             </div>
 
+            <section className="wallet-panel" aria-label="钱包">
+              <article>
+                <WalletCards size={19} />
+                <div>
+                  <span>吃商钱包</span>
+                  <strong>¥{walletLimit}</strong>
+                </div>
+                <em className={walletRemaining < 0 ? "danger" : ""}>
+                  {walletRemaining >= 0 ? `剩余 ¥${walletRemaining}` : `超出 ¥${Math.abs(walletRemaining)}`}
+                </em>
+              </article>
+              <button className="coupon-boost-card" type="button" onClick={inflateCoupon}>
+                <TicketPercent size={18} />
+                <div>
+                  <span>神券膨胀</span>
+                  <strong>{couponBoost ? `+¥${couponBoost.bonus}` : "随机+3-10"}</strong>
+                </div>
+                <em>{boostTargetCoupon ? boostTargetCoupon.label : "选券膨胀"}</em>
+              </button>
+            </section>
+
             <section className="combo-showcase" aria-label="超值搭配">
               <div className="section-heading">
                 <div>
-                  <h2>超值搭配</h2>
-                  <p>组合下单，快乐翻倍</p>
+                  <h2>吃商线索套餐</h2>
+                  <p>按今日状态推荐，一键加入</p>
                 </div>
                 <Tags size={18} />
               </div>
-              <div className="combo-cards">
-                {(combos.length > 0 ? combos : comboRules.slice(0, 3)).slice(0, 3).map((combo, index) => (
-                  <article key={combo.id}>
-                    <span>{index === 0 ? "当前最搭" : "隐藏组合"}</span>
-                    <strong>{combo.name}</strong>
-                    <p>{combo.description}</p>
-                  </article>
+              <div className="preset-cards">
+                {recommendedPresets.map(({ preset, items, price, presetCoupon, payable }, index) => (
+                  <button key={preset.id} className={index === 0 ? "top-preset" : ""} type="button" onClick={() => addPresetToCart(preset)}>
+                    <div className="preset-copy">
+                      <span>{index === 0 ? "力度最大" : "优质搭配"}</span>
+                      <strong>{preset.name}</strong>
+                      <p>{preset.line}</p>
+                    </div>
+                    <div className="preset-foods">
+                      {items.slice(0, 3).map((item) => (
+                        <img key={item.id} src={resolveMenuImage(item)} alt="" loading="lazy" />
+                      ))}
+                    </div>
+                    <div className="preset-meta">
+                      <small>{items.map((item) => item.name).join(" / ")}</small>
+                      <b>{presetCoupon ? `券后 ¥${payable}` : `¥${price}`}</b>
+                      <em>一键添加</em>
+                    </div>
+                  </button>
                 ))}
               </div>
             </section>
@@ -392,7 +695,7 @@ function App() {
                       </div>
                       <div className="tag-row">
                         {item.tags.slice(0, 3).map((tag) => (
-                          <span key={tag}>{tag}</span>
+                          <span key={tag}>{getTagLabel(tag)}</span>
                         ))}
                       </div>
                       <div className="product-actions">
@@ -408,28 +711,74 @@ function App() {
             </div>
 
             <aside className="cart-bar" aria-label="购物车">
-              <div className="cart-basket">
-                <ShoppingBag size={28} />
-                <b>{cartCount}</b>
-              </div>
-              <div className="cart-main">
-                <div>
-                  <strong>¥{payablePrice}</strong>
-                  <span>{cartDiscount > 0 ? `优惠¥${cartDiscount} · ` : ""}事务所订单 · {cartCount} 件</span>
-                  <div className="cart-boosts">
-                    {cartBoosts.map((boost) => (
-                      <em key={boost.label}>{boost.label} {formatSigned(boost.value)}</em>
-                    ))}
+              <button className="cart-toggle" type="button" onClick={toggleCartDrawer} disabled={cart.length === 0} aria-expanded={isCartOpen}>
+                <div className="cart-basket">
+                  <ShoppingBag size={28} />
+                  <b>{cartCount}</b>
+                </div>
+                <div className="cart-main">
+                  <div>
+                    <strong>¥{payablePrice}</strong>
+                    <span>{couponDiscount > 0 ? `券减¥${couponDiscount} · ` : ""}钱包剩余¥{walletRemaining >= 0 ? walletRemaining : 0}</span>
+                    <div className="cart-boosts">
+                      {cartBoosts.map((boost) => (
+                        <em key={boost.label}>{boost.label} {formatSigned(boost.value)}</em>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <button type="button" onClick={startDelivery} disabled={cart.length === 0}>
-                下单
+                <ChevronDown className={isCartOpen ? "expanded" : ""} size={18} />
+              </button>
+              <button className="checkout-button" type="button" onClick={startDelivery} disabled={!walletCanPay}>
+                {cart.length > 0 && !walletCanPay ? "余额不足" : "下单"}
               </button>
             </aside>
 
-            {cart.length > 0 && (
-              <div className="cart-drawer">
+            {cart.length > 0 && isCartOpen && (
+              <div className="cart-drawer" aria-label="已点餐品">
+                <section className="cart-coupon-panel" aria-label="优惠券">
+                  <button className="coupon-pocket" type="button" onClick={toggleCouponDrawer} aria-expanded={isCouponOpen}>
+                    <TicketPercent size={18} />
+                    <div>
+                      <span>红包优惠</span>
+                      <strong>{selectedCoupon ? `${selectedCoupon.label} · -¥${couponDiscount}` : nextCoupon ? `差¥${nextCoupon.threshold - totals.price}` : "暂无红包"}</strong>
+                    </div>
+                    <em>{selectedCoupon ? "已自动抵扣" : nextCoupon ? "再点可用" : "已无可用"}</em>
+                    <ChevronDown className={isCouponOpen ? "expanded" : ""} size={16} />
+                  </button>
+
+                  {isCouponOpen && (
+                    <div className="coupon-drawer" aria-label="可使用优惠券">
+                      {availableCoupons.length > 0 ? (
+                        availableCoupons.map((coupon) => {
+                          const active = selectedCoupon?.id === coupon.id;
+                          return (
+                            <button
+                              key={coupon.id}
+                              className={active ? "active" : ""}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCouponId(coupon.id);
+                                setIsCouponOpen(false);
+                              }}
+                              aria-pressed={active}
+                            >
+                              <b>{coupon.label}</b>
+                              <span>{coupon.description}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p>{nextCoupon ? `再点¥${nextCoupon.threshold - totals.price}可用` : "暂无红包"}</p>
+                      )}
+                    </div>
+                  )}
+                </section>
+                <button className="cart-drawer-head" type="button" onClick={toggleCartDrawer} aria-expanded={isCartOpen}>
+                  <span>已点餐品</span>
+                  <small>共 {cartCount} 件 · 再点一下收起</small>
+                  <ChevronDown className="expanded" size={16} />
+                </button>
                 <div className="combo-row">
                   {combos.slice(0, 3).map((combo) => (
                     <span key={combo.id}>{combo.name}</span>
@@ -438,8 +787,13 @@ function App() {
                 </div>
                 {cart.map((entry, index) => (
                   <div className="cart-line" key={`${entry.item.id}-${index}`}>
-                    <span>{entry.item.name}</span>
+                    <img src={resolveMenuImage(entry.item)} alt="" loading="lazy" />
+                    <div className="cart-line-title">
+                      <span>{entry.item.name}</span>
+                      <small>{getEntryOptionSummary(entry) || "默认规格"}</small>
+                    </div>
                     <div>
+                      <b>¥{getEntrySubtotal(entry)}</b>
                       <button type="button" onClick={() => adjustQuantity(index, -1)} aria-label={`减少 ${entry.item.name}`}>-</button>
                       <strong>{entry.quantity}</strong>
                       <button type="button" onClick={() => adjustQuantity(index, 1)} aria-label={`增加 ${entry.item.name}`}>+</button>
@@ -456,8 +810,8 @@ function App() {
             <div className="delivery-progress">
               <Bike size={22} />
               <div>
-                <strong>配送事件 {eventIndex + 1} / {route.length}</strong>
-                <span>{eventTypeLabels[currentEvent.type]}</span>
+                <strong>外卖配送选择 {eventIndex + 1} / {route.length}</strong>
+                <span>{eventTypeLabels[currentEvent.type]} · 你的选择会影响真实 MBTI</span>
               </div>
             </div>
             <article className="event-card">
@@ -499,15 +853,15 @@ function App() {
                   <div className="ticket-brand">
                     <div className="ticket-avatar">单</div>
                     <div>
-                      <span>快乐下单事务所</span>
-                      <small>HAPPY ORDER OFFICE</small>
+                      <span>今天你吃商几级？</span>
+                      <small>FOOD IQ TEST</small>
                     </div>
                   </div>
                   <strong>已送达</strong>
                 </div>
                 <div className="ticket-title">
-                  <h2>快乐订单小票</h2>
-                  <p>感谢你的每一次认真选择</p>
+                  <h2>吃商测试小票</h2>
+                  <p>你的每次配送选择都在推导人格</p>
                 </div>
 
                 <div className="journey-ledger">
@@ -530,12 +884,22 @@ function App() {
                     <ReceiptText size={18} />
                     <span>{summary.orderTitle}</span>
                   </div>
-                  {cart.map((entry) => (
-                    <div className="receipt-line" key={entry.item.id}>
-                      <span>{entry.item.name} x{entry.quantity}</span>
-                      <b>¥{entry.item.price * entry.quantity}</b>
+                  {cart.map((entry, index) => (
+                    <div className="receipt-line" key={`${entry.item.id}-${index}`}>
+                      <span>{entry.item.name} x{entry.quantity}{getEntryOptionSummary(entry) ? ` · ${getEntryOptionSummary(entry)}` : ""}</span>
+                      <b>¥{getEntrySubtotal(entry)}</b>
                     </div>
                   ))}
+                  {couponDiscount > 0 && (
+                    <div className="receipt-line discount">
+                      <span>{selectedCoupon?.label}</span>
+                      <b>-¥{couponDiscount}</b>
+                    </div>
+                  )}
+                  <div className="receipt-line">
+                    <span>钱包实付</span>
+                    <b>¥{payablePrice}</b>
+                  </div>
                   {summary.receiptLines.map((line) => (
                     <p key={line}>{line}</p>
                   ))}
@@ -543,11 +907,11 @@ function App() {
                 </div>
               </section>
 
-              <section className="persona-card" aria-label="美食人格 MBTI">
+              <section className="persona-card" aria-label="真实 MBTI 吃商人格">
                 <div className="persona-visual">
                   <img src={featuredResultImage} alt="" />
                   <div>
-                    <span>你的美食人格 MBTI</span>
+                    <span>你的真实 MBTI 吃商人格</span>
                     <strong>{summary.foodPersona.displayName}</strong>
                     <small>{summary.foodPersona.variantTitle}</small>
                   </div>
@@ -601,7 +965,8 @@ function App() {
                 <div>
                   <h2>{editingItem.name}</h2>
                   <p>{editingItem.description}</p>
-                  <strong>¥{editingItem.price}</strong>
+                  <strong>¥{getEntryUnitPrice({ item: editingItem, quantity: 1, selectedChoices: draftChoices })}</strong>
+                  <small>已按当前规格计价</small>
                 </div>
               </div>
               {editingItem.options?.map((group) => (

@@ -13,7 +13,7 @@ describe("App", () => {
     expect(screen.getAllByText(/今日下单目的/).length).toBeGreaterThan(0);
 
     await user.click(screen.getAllByRole("button", { name: /加入/ })[0]);
-    expect(screen.getByText(/事务所订单/)).toBeInTheDocument();
+    expect(screen.getByText(/钱包剩余/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "下单" })).toBeInTheDocument();
   });
 });

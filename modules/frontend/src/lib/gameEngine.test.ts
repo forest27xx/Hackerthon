@@ -192,7 +192,7 @@ describe("gameEngine", () => {
     expect(summary.orderTitle).toBe("工作日精神急救订单");
     expect(summary.persona).toContain("加班续命包");
     expect(summary.shareText).toContain("快乐指数");
-    expect(summary.receiptLines).toContain("配送博弈：封口机临时故障 / 饭后久坐预警");
+    expect(summary.receiptLines).toContain("配送选择：封口机临时故障 / 饭后久坐预警");
     expect(summary.foodPersona.code).toHaveLength(4);
     expect(summary.journeyLines.join(" / ")).toContain("今日下单目的");
   });

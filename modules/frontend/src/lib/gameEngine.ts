@@ -591,7 +591,7 @@ export const generateResultSummary = ({
     `互动过程：${choiceLine}`,
     `订单金额：¥${totals.price}`,
     `触发组合：${comboNames.length ? comboNames.join("、") : "暂无，继续加料试试"}`,
-    `配送博弈：${eventLine}`,
+    `配送选择：${eventLine}`,
     `今日订单名：${moodOrderTitles[mood]}`,
     `快乐指数：${joyIndex} / 健康指数：${healthIndex} / 安全指数：${safetyIndex}`
   ];

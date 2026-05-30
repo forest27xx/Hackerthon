@@ -26,15 +26,16 @@ export const moods: MoodOption[] = [
   { id: "lateNight", label: "深夜嘴馋", line: "罪恶感先放一边，健康备注跟上。", recommendedTags: ["warm", "lowSugar"] }
 ];
 
-const drinkOptions: OptionGroup[] = [
+const milkTeaOptions: OptionGroup[] = [
   {
     id: "sugar",
     name: "糖度",
     type: "single",
     choices: [
-      { id: "zero", label: "无糖", statDelta: { health: 8, joy: -1 }, tags: ["lowSugar"] },
-      { id: "half", label: "半糖", statDelta: { health: 5, joy: 1 }, tags: ["lowSugar"] },
-      { id: "normal", label: "正常糖", statDelta: { joy: 4, health: -3 }, tags: ["sweet"] }
+      { id: "default", label: "标准甜", statDelta: { joy: 2 }, tags: ["sweet"] },
+      { id: "less", label: "七分糖", statDelta: { health: 3, joy: 1 }, tags: ["lowSugar"] },
+      { id: "half", label: "五分糖", statDelta: { health: 5 }, tags: ["lowSugar"] },
+      { id: "zero", label: "无糖", statDelta: { health: 8, joy: -1 }, tags: ["lowSugar"] }
     ]
   },
   {
@@ -42,9 +43,19 @@ const drinkOptions: OptionGroup[] = [
     name: "冰量",
     type: "single",
     choices: [
-      { id: "hot", label: "热饮", statDelta: { safety: 2, health: 1 }, tags: ["warm"] },
+      { id: "default", label: "正常冰", statDelta: { joy: 1, energy: 1 } },
       { id: "lessIce", label: "少冰", statDelta: { safety: 2 }, tags: ["safe"] },
-      { id: "ice", label: "正常冰", statDelta: { joy: 2, energy: 1 } }
+      { id: "noIce", label: "去冰", statDelta: { health: 2, safety: 2 }, tags: ["safe"] },
+      { id: "hot", label: "热饮", statDelta: { safety: 2, health: 1 }, tags: ["warm"] }
+    ]
+  },
+  {
+    id: "cup",
+    name: "杯型",
+    type: "single",
+    choices: [
+      { id: "medium", label: "中杯" },
+      { id: "large", label: "大杯", priceDelta: 3, statDelta: { joy: 2, fullness: 2 }, tags: ["fullness"] }
     ]
   },
   {
@@ -53,8 +64,358 @@ const drinkOptions: OptionGroup[] = [
     type: "multi",
     choices: [
       { id: "boba", label: "珍珠", priceDelta: 2, statDelta: { joy: 3, fullness: 2 }, tags: ["chewy"] },
+      { id: "coconut", label: "椰果", priceDelta: 2, statDelta: { joy: 2, fullness: 1 }, tags: ["chewy"] },
       { id: "taro", label: "芋泥", priceDelta: 4, statDelta: { joy: 5, fullness: 4 }, tags: ["comfort"] },
-      { id: "sealed", label: "加固杯托", priceDelta: 1, statDelta: { safety: 5 }, tags: ["safe"] }
+      { id: "cream", label: "芝士奶盖", priceDelta: 3, statDelta: { joy: 4, health: -2 }, tags: ["cheese"] }
+    ]
+  },
+  {
+    id: "drinkPack",
+    name: "封装",
+    type: "multi",
+    choices: [
+      { id: "cupHolder", label: "加固杯托", priceDelta: 1, statDelta: { safety: 5 }, tags: ["safe"] },
+      { id: "sealBag", label: "密封袋", priceDelta: 1, statDelta: { safety: 4 }, tags: ["separatePack"] },
+      { id: "splitHotCold", label: "冷热分袋", priceDelta: 1, statDelta: { safety: 5 }, tags: ["separatePack"] }
+    ]
+  }
+];
+
+const coffeeOptions: OptionGroup[] = [
+  {
+    id: "coffeeTemp",
+    name: "冷热",
+    type: "single",
+    choices: [
+      { id: "default", label: "按商品默认", statDelta: { safety: 1 }, tags: ["safe"] },
+      { id: "hot", label: "热饮", statDelta: { health: 1, safety: 2 }, tags: ["warm"] },
+      { id: "iced", label: "冰饮", statDelta: { joy: 1, energy: 1 } },
+      { id: "lessIce", label: "少冰", statDelta: { safety: 2 }, tags: ["safe"] }
+    ]
+  },
+  {
+    id: "coffeeCup",
+    name: "杯型",
+    type: "single",
+    choices: [
+      { id: "regular", label: "标准杯" },
+      { id: "large", label: "大杯", priceDelta: 4, statDelta: { energy: 3, fullness: 1 }, tags: ["caffeine"] }
+    ]
+  },
+  {
+    id: "coffeeMilk",
+    name: "奶基",
+    type: "single",
+    choices: [
+      { id: "default", label: "默认奶基" },
+      { id: "oat", label: "换燕麦奶", priceDelta: 3, statDelta: { health: 3 }, tags: ["healthy"] },
+      { id: "lowFat", label: "低脂奶", priceDelta: 2, statDelta: { health: 4 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "coffeeSweet",
+    name: "甜度",
+    type: "single",
+    choices: [
+      { id: "default", label: "按商品默认" },
+      { id: "less", label: "少糖", statDelta: { health: 4 }, tags: ["lowSugar"] },
+      { id: "zero", label: "无糖", statDelta: { health: 7, joy: -1 }, tags: ["lowSugar"] }
+    ]
+  },
+  {
+    id: "coffeePack",
+    name: "封装",
+    type: "multi",
+    choices: [
+      { id: "cupHolder", label: "加固杯托", priceDelta: 1, statDelta: { safety: 5 }, tags: ["safe"] },
+      { id: "heatSleeve", label: "隔热杯套", priceDelta: 1, statDelta: { safety: 3 }, tags: ["safe"] },
+      { id: "split", label: "冷热分袋", priceDelta: 1, statDelta: { safety: 5 }, tags: ["separatePack"] }
+    ]
+  }
+];
+
+const drinkOptions: OptionGroup[] = [
+  {
+    id: "drinkTemp",
+    name: "冷热",
+    type: "single",
+    choices: [
+      { id: "default", label: "按商品默认", statDelta: { safety: 1 }, tags: ["safe"] },
+      { id: "iced", label: "冰镇", statDelta: { joy: 1, energy: 1 }, tags: ["refresh"] },
+      { id: "room", label: "常温", statDelta: { health: 1, safety: 2 }, tags: ["safe"] },
+      { id: "hot", label: "热饮", statDelta: { health: 2, safety: 2 }, tags: ["warm"] }
+    ]
+  },
+  {
+    id: "drinkSugar",
+    name: "甜度",
+    type: "single",
+    choices: [
+      { id: "default", label: "按商品默认" },
+      { id: "less", label: "少糖", statDelta: { health: 4 }, tags: ["lowSugar"] },
+      { id: "zero", label: "无糖", statDelta: { health: 7, joy: -1 }, tags: ["lowSugar"] }
+    ]
+  },
+  {
+    id: "drinkPack",
+    name: "封装",
+    type: "multi",
+    choices: [
+      { id: "cupHolder", label: "加固杯托", priceDelta: 1, statDelta: { safety: 5 }, tags: ["safe"] },
+      { id: "splitHotCold", label: "冷热分袋", priceDelta: 1, statDelta: { safety: 5 }, tags: ["separatePack"] }
+    ]
+  }
+];
+
+const dessertOptions: OptionGroup[] = [
+  {
+    id: "dessertPortion",
+    name: "规格",
+    type: "single",
+    choices: [
+      { id: "single", label: "单人份" },
+      { id: "share", label: "双人分享", priceDelta: 8, statDelta: { joy: 4, fullness: 5 }, tags: ["share"] },
+      { id: "light", label: "轻甜小份", statDelta: { health: 3, fullness: -1 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "dessertSweet",
+    name: "甜度",
+    type: "single",
+    choices: [
+      { id: "default", label: "标准甜" },
+      { id: "less", label: "少糖", statDelta: { health: 5 }, tags: ["lowSugar"] },
+      { id: "extra", label: "加甜酱", priceDelta: 2, statDelta: { joy: 3, health: -2 }, tags: ["sweet"] }
+    ]
+  },
+  {
+    id: "dessertPack",
+    name: "配送包装",
+    type: "multi",
+    choices: [
+      { id: "iceBag", label: "加冰袋", priceDelta: 2, statDelta: { safety: 5 }, tags: ["safe"] },
+      { id: "cutlery", label: "配叉勺", priceDelta: 1, statDelta: { safety: 2 }, tags: ["safe"] },
+      { id: "separateSauce", label: "酱料分装", priceDelta: 1, statDelta: { safety: 4 }, tags: ["separatePack"] }
+    ]
+  }
+];
+
+const snackOptions: OptionGroup[] = [
+  {
+    id: "snackPortion",
+    name: "分量",
+    type: "single",
+    choices: [
+      { id: "regular", label: "标准份", statDelta: { fullness: 1 } },
+      { id: "large", label: "加量", priceDelta: 5, statDelta: { joy: 2, fullness: 6 }, tags: ["fullness"] },
+      { id: "half", label: "轻量尝鲜", statDelta: { health: 2, fullness: -2 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "snackTaste",
+    name: "口味",
+    type: "single",
+    choices: [
+      { id: "default", label: "默认口味" },
+      { id: "spicy", label: "加辣", statDelta: { joy: 3, energy: 2 }, tags: ["spicy"] },
+      { id: "noSpicy", label: "不辣", statDelta: { health: 2, safety: 2 }, tags: ["safe"] }
+    ]
+  },
+  {
+    id: "snackPack",
+    name: "包装",
+    type: "multi",
+    choices: [
+      { id: "sauceSeparate", label: "酱料分装", priceDelta: 1, statDelta: { safety: 4 }, tags: ["separatePack"] },
+      { id: "crispBag", label: "脆皮透气袋", priceDelta: 1, statDelta: { safety: 4 }, tags: ["safe"] },
+      { id: "lessOil", label: "吸油纸", priceDelta: 1, statDelta: { health: 3 }, tags: ["healthyNote"] }
+    ]
+  }
+];
+
+const nightFoodOptions: OptionGroup[] = [
+  {
+    id: "nightPortion",
+    name: "分量",
+    type: "single",
+    choices: [
+      { id: "regular", label: "标准份", statDelta: { fullness: 2 } },
+      { id: "large", label: "加量", priceDelta: 6, statDelta: { fullness: 7, joy: 2 }, tags: ["fullness"] },
+      { id: "less", label: "少粉少饭", statDelta: { health: 3, fullness: -2 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "nightTaste",
+    name: "夜宵口味",
+    type: "single",
+    choices: [
+      { id: "default", label: "默认口味" },
+      { id: "lessOilSalt", label: "少油少盐", statDelta: { health: 6, joy: -1 }, tags: ["healthyNote"] },
+      { id: "extraSpicy", label: "重辣", statDelta: { joy: 4, health: -2, energy: 2 }, tags: ["spicy"] }
+    ]
+  },
+  {
+    id: "nightPack",
+    name: "防漏包装",
+    type: "multi",
+    choices: [
+      { id: "soupSeparate", label: "汤汁分装", priceDelta: 2, statDelta: { safety: 6 }, tags: ["separatePack"] },
+      { id: "tableware", label: "餐具包", priceDelta: 1, statDelta: { safety: 2 }, tags: ["safe"] },
+      { id: "heatBag", label: "保温袋", priceDelta: 2, statDelta: { safety: 4 }, tags: ["warm"] }
+    ]
+  }
+];
+
+const lightFoodOptions: OptionGroup[] = [
+  {
+    id: "lightPortion",
+    name: "规格",
+    type: "single",
+    choices: [
+      { id: "regular", label: "标准份", statDelta: { health: 1 } },
+      { id: "protein", label: "加蛋白", priceDelta: 6, statDelta: { health: 5, fullness: 4 }, tags: ["protein"] },
+      { id: "halfCarb", label: "半份主食", statDelta: { health: 4, fullness: -2 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "lightSauce",
+    name: "酱料",
+    type: "single",
+    choices: [
+      { id: "default", label: "标准酱" },
+      { id: "separate", label: "酱料分装", statDelta: { health: 3, safety: 3 }, tags: ["separatePack"] },
+      { id: "less", label: "少酱", statDelta: { health: 5 }, tags: ["healthyNote"] }
+    ]
+  },
+  {
+    id: "lightPack",
+    name: "包装",
+    type: "multi",
+    choices: [
+      { id: "coldKeep", label: "冷藏保鲜袋", priceDelta: 2, statDelta: { safety: 5 }, tags: ["safe"] },
+      { id: "cutlery", label: "餐具包", priceDelta: 1, statDelta: { safety: 2 }, tags: ["safe"] }
+    ]
+  }
+];
+
+const stapleOptions: OptionGroup[] = [
+  {
+    id: "staplePortion",
+    name: "主食分量",
+    type: "single",
+    choices: [
+      { id: "regular", label: "标准份", statDelta: { fullness: 2 } },
+      { id: "extraRice", label: "加饭/加面", priceDelta: 4, statDelta: { fullness: 7, joy: 1 }, tags: ["fullness"] },
+      { id: "lessRice", label: "少饭/半面", statDelta: { health: 4, fullness: -2 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "stapleTaste",
+    name: "口味备注",
+    type: "single",
+    choices: [
+      { id: "default", label: "默认口味" },
+      { id: "lessOilSalt", label: "少油少盐", statDelta: { health: 6, joy: -1 }, tags: ["healthyNote"] },
+      { id: "spicy", label: "加辣", statDelta: { joy: 3, energy: 2 }, tags: ["spicy"] }
+    ]
+  },
+  {
+    id: "staplePack",
+    name: "包装",
+    type: "multi",
+    choices: [
+      { id: "sauceSeparate", label: "酱汁分装", priceDelta: 1, statDelta: { safety: 4 }, tags: ["separatePack"] },
+      { id: "tableware", label: "餐具包", priceDelta: 1, statDelta: { safety: 2 }, tags: ["safe"] },
+      { id: "splitHotCold", label: "冷热分袋", priceDelta: 1, statDelta: { safety: 5 }, tags: ["separatePack"] }
+    ]
+  }
+];
+
+const stirFryOptions: OptionGroup[] = [
+  {
+    id: "dishPortion",
+    name: "菜品分量",
+    type: "single",
+    choices: [
+      { id: "regular", label: "标准份", statDelta: { fullness: 1 } },
+      { id: "large", label: "加量", priceDelta: 8, statDelta: { fullness: 6, joy: 3 }, tags: ["fullness"] },
+      { id: "half", label: "小份尝鲜", statDelta: { health: 2, fullness: -2 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "dishTaste",
+    name: "口味",
+    type: "single",
+    choices: [
+      { id: "default", label: "默认口味" },
+      { id: "lessOilSalt", label: "少油少盐", statDelta: { health: 7, joy: -1 }, tags: ["healthyNote"] },
+      { id: "spicy", label: "加辣", statDelta: { joy: 4, energy: 2 }, tags: ["spicy"] }
+    ]
+  },
+  {
+    id: "dishPack",
+    name: "打包",
+    type: "multi",
+    choices: [
+      { id: "rice", label: "加米饭", priceDelta: 4, statDelta: { fullness: 6 }, tags: ["fullness"] },
+      { id: "sauceSeparate", label: "汤汁/酱汁分装", priceDelta: 1, statDelta: { safety: 5 }, tags: ["separatePack"] },
+      { id: "tableware", label: "餐具包", priceDelta: 1, statDelta: { safety: 2 }, tags: ["safe"] }
+    ]
+  }
+];
+
+const soupPotOptions: OptionGroup[] = [
+  {
+    id: "potSize",
+    name: "锅底规格",
+    type: "single",
+    choices: [
+      { id: "single", label: "单人小锅", statDelta: { fullness: 2 } },
+      { id: "share", label: "双人分享锅", priceDelta: 12, statDelta: { joy: 5, fullness: 8 }, tags: ["share"] },
+      { id: "light", label: "轻量小锅", statDelta: { health: 3, fullness: -2 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "potTaste",
+    name: "汤底/辣度",
+    type: "single",
+    choices: [
+      { id: "default", label: "默认汤底" },
+      { id: "mild", label: "微辣", statDelta: { safety: 2 }, tags: ["safe"] },
+      { id: "spicy", label: "重辣", statDelta: { joy: 5, health: -2, energy: 2 }, tags: ["spicy"] },
+      { id: "clear", label: "清汤", statDelta: { health: 5 }, tags: ["healthy"] }
+    ]
+  },
+  {
+    id: "potPack",
+    name: "汤锅包装",
+    type: "multi",
+    choices: [
+      { id: "soupSeparate", label: "汤菜分装", priceDelta: 2, statDelta: { safety: 7 }, tags: ["separatePack"] },
+      { id: "seal", label: "防漏封膜", priceDelta: 2, statDelta: { safety: 7 }, tags: ["safe"] },
+      { id: "heatBag", label: "保温袋", priceDelta: 2, statDelta: { safety: 4 }, tags: ["warm"] }
+    ]
+  }
+];
+
+const otherOptions: OptionGroup[] = [
+  {
+    id: "addonCount",
+    name: "数量规格",
+    type: "single",
+    choices: [
+      { id: "single", label: "单份" },
+      { id: "double", label: "双份", priceDelta: 6, statDelta: { fullness: 4, joy: 2 }, tags: ["share"] },
+      { id: "small", label: "小份", statDelta: { health: 2, fullness: -1 }, tags: ["light"] }
+    ]
+  },
+  {
+    id: "addonPack",
+    name: "包装",
+    type: "multi",
+    choices: [
+      { id: "separate", label: "单独分装", priceDelta: 1, statDelta: { safety: 4 }, tags: ["separatePack"] },
+      { id: "tableware", label: "餐具包", priceDelta: 1, statDelta: { safety: 2 }, tags: ["safe"] }
     ]
   }
 ];
@@ -65,9 +426,9 @@ const foodOptions: OptionGroup[] = [
     name: "分量",
     type: "single",
     choices: [
-      { id: "small", label: "轻量", statDelta: { health: 3, fullness: -2 }, tags: ["light"] },
-      { id: "normal", label: "标准", statDelta: { fullness: 2 } },
-      { id: "large", label: "加量", priceDelta: 5, statDelta: { joy: 2, fullness: 7, health: -2 }, tags: ["fullness"] }
+      { id: "regular", label: "标准份", statDelta: { fullness: 2 } },
+      { id: "large", label: "加量", priceDelta: 5, statDelta: { joy: 2, fullness: 7, health: -2 }, tags: ["fullness"] },
+      { id: "small", label: "轻量", statDelta: { health: 3, fullness: -2 }, tags: ["light"] }
     ]
   },
   {
@@ -286,16 +647,16 @@ const categoryPrefixes: Record<Category, string> = {
 };
 
 const defaultOptionsByCategory: Record<Category, OptionGroup[]> = {
-  milkTea: drinkOptions,
-  coffee: drinkOptions,
-  dessert: foodOptions,
-  snack: foodOptions,
-  nightFood: foodOptions,
-  lightFood: foodOptions,
-  staple: foodOptions,
-  stirFry: foodOptions,
-  soupPot: foodOptions,
-  other: foodOptions
+  milkTea: milkTeaOptions,
+  coffee: coffeeOptions,
+  dessert: dessertOptions,
+  snack: snackOptions,
+  nightFood: nightFoodOptions,
+  lightFood: lightFoodOptions,
+  staple: stapleOptions,
+  stirFry: stirFryOptions,
+  soupPot: soupPotOptions,
+  other: otherOptions
 };
 
 const buildMenuItems = (): MenuItem[] => {
