@@ -4,6 +4,8 @@ import type { OrderVoiceCue, OrderVoiceRole } from "../data/orderVoiceCues";
 export type SfxType = "tap" | "select" | "checkout" | "success" | "result";
 
 const BGM_SRC = "/audio/bgm/main-bgm.mp3";
+const BUTTON_CLICK_SRC = "/audio/sfx/button-click.mp3";
+const BUTTON_SFX_DEDUPE_MS = 90;
 
 const sfxProfiles: Record<SfxType, { frequency: number; endFrequency: number; duration: number; volume: number }> = {
   tap: { frequency: 760, endFrequency: 980, duration: 0.055, volume: 0.035 },
@@ -11,6 +13,11 @@ const sfxProfiles: Record<SfxType, { frequency: number; endFrequency: number; du
   checkout: { frequency: 430, endFrequency: 740, duration: 0.14, volume: 0.05 },
   success: { frequency: 660, endFrequency: 1120, duration: 0.18, volume: 0.055 },
   result: { frequency: 390, endFrequency: 880, duration: 0.22, volume: 0.055 }
+};
+
+const sfxAssetProfiles: Partial<Record<SfxType, { src: string; volume: number }>> = {
+  tap: { src: BUTTON_CLICK_SRC, volume: 0.38 },
+  select: { src: BUTTON_CLICK_SRC, volume: 0.44 }
 };
 
 const fallbackSpeechProfile: Record<OrderVoiceRole, { rate: number; pitch: number; volume: number }> = {
@@ -27,6 +34,8 @@ const isPromiseLike = (value: unknown): value is Promise<unknown> =>
 const canUseHtmlAudio = () =>
   typeof Audio !== "undefined" && (typeof navigator === "undefined" || !/jsdom/i.test(navigator.userAgent));
 
+const getSfxTimestamp = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
 export const useSoundController = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [audioReady, setAudioReady] = useState(false);
@@ -36,6 +45,8 @@ export const useSoundController = () => {
   const bgmAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const lastVoiceCueRef = useRef<OrderVoiceCue | null>(null);
+  const sfxAudioRefs = useRef<Partial<Record<SfxType, HTMLAudioElement>>>({});
+  const lastSfxPlayedAtRef = useRef(0);
 
   const getAudioContext = useCallback(() => {
     if (typeof window === "undefined") return null;
@@ -87,9 +98,41 @@ export const useSoundController = () => {
     window.speechSynthesis?.speak(utterance);
   }, []);
 
+  const playSfxAsset = useCallback((type: SfxType) => {
+    const asset = sfxAssetProfiles[type];
+    if (!asset || !canUseHtmlAudio()) return false;
+
+    try {
+      const baseAudio = sfxAudioRefs.current[type] ?? new Audio(asset.src);
+      sfxAudioRefs.current[type] = baseAudio;
+      baseAudio.preload = "auto";
+      const audio = baseAudio.cloneNode(true) as HTMLAudioElement;
+      audio.volume = asset.volume;
+      const playPromise = audio.play();
+      if (isPromiseLike(playPromise)) void playPromise.catch(() => undefined);
+      lastSfxPlayedAtRef.current = getSfxTimestamp();
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const preloadSfxAssets = useCallback(() => {
+    if (!canUseHtmlAudio()) return;
+    (Object.entries(sfxAssetProfiles) as Array<[SfxType, { src: string; volume: number }]>).forEach(([type, asset]) => {
+      if (sfxAudioRefs.current[type]) return;
+      const audio = new Audio(asset.src);
+      audio.preload = "auto";
+      audio.volume = asset.volume;
+      sfxAudioRefs.current[type] = audio;
+    });
+  }, []);
+
   const playSfx = useCallback(
     (type: SfxType = "tap") => {
       if (!soundEnabledRef.current || !audioReadyRef.current) return;
+      if (getSfxTimestamp() - lastSfxPlayedAtRef.current < BUTTON_SFX_DEDUPE_MS) return;
+      if (playSfxAsset(type)) return;
 
       const context = getAudioContext();
       if (!context) return;
@@ -111,8 +154,9 @@ export const useSoundController = () => {
       gain.connect(context.destination);
       oscillator.start(now);
       oscillator.stop(now + profile.duration + 0.02);
+      lastSfxPlayedAtRef.current = getSfxTimestamp();
     },
-    [getAudioContext]
+    [getAudioContext, playSfxAsset]
   );
 
   const playOrderVoice = useCallback(
@@ -160,8 +204,9 @@ export const useSoundController = () => {
     setAudioReady(true);
     const context = getAudioContext();
     if (context?.state === "suspended") void context.resume().catch(() => undefined);
+    preloadSfxAssets();
     startBgm();
-  }, [getAudioContext, startBgm]);
+  }, [getAudioContext, preloadSfxAssets, startBgm]);
 
   const toggleSound = useCallback(() => {
     setSoundEnabled((current) => !current);
@@ -180,10 +225,27 @@ export const useSoundController = () => {
     if (audioReady) startBgm();
   }, [audioReady, pauseBgm, soundEnabled, startBgm, stopVoicePlayback]);
 
+  useEffect(() => {
+    const playForButtonClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const button = target.closest("button,[role='button']");
+      if (!button) return;
+      if (button instanceof HTMLButtonElement && button.disabled) return;
+
+      playSfx("tap");
+    };
+
+    document.addEventListener("click", playForButtonClick, true);
+    return () => document.removeEventListener("click", playForButtonClick, true);
+  }, [playSfx]);
+
   useEffect(
     () => () => {
       stopVoicePlayback();
       pauseBgm();
+      Object.values(sfxAudioRefs.current).forEach((audio) => audio?.pause());
       void audioContextRef.current?.close().catch(() => undefined);
     },
     [pauseBgm, stopVoicePlayback]

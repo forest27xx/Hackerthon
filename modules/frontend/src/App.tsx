@@ -60,7 +60,8 @@ import escortBoardFoodStreet from "./assets/escort/escort-board-food-street.png"
 import riderToken from "./assets/escort/rider-token.png";
 import eatiStartCover from "./assets/cover/eati-start-cover.png";
 import neonOrderOffice from "./assets/cover/neon-order-office.png";
-import chiShangGrid from "./assets/persona/chi-shang-grid.png";
+import chiShangGrid from "./assets/persona/chi-shang-grid-v2.png";
+import { ResultRevealPanel } from "./components/ResultRevealPanel";
 import { categories, comboRules, menuItems, moods } from "./data/catalog";
 import { diceConfigs } from "./data/escortBoard";
 import { getOrderVoiceCue } from "./data/orderVoiceCues";
@@ -551,6 +552,7 @@ function App() {
   const [isResolvingChoice, setIsResolvingChoice] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [orderPlacedAt, setOrderPlacedAt] = useState<number | null>(null);
   const [isCoverEntering, setIsCoverEntering] = useState(false);
   const [selectedMoodFeedback, setSelectedMoodFeedback] = useState<Mood | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
@@ -587,6 +589,8 @@ function App() {
     [boostedCoupons, selectedCoupon, selectedCouponId]
   );
   const couponDiscount = selectedCoupon?.discount ?? 0;
+  const couponBoostDiscount = selectedCoupon && couponBoost?.couponId === selectedCoupon.id ? couponBoost.bonus : 0;
+  const baseCouponDiscount = Math.max(0, couponDiscount - couponBoostDiscount);
   const payablePrice = Math.max(0, totals.price - couponDiscount);
   const walletRemaining = walletLimit - payablePrice;
   const walletCanPay = cart.length > 0 && walletRemaining >= 0;
@@ -860,12 +864,29 @@ function App() {
     setIsCouponOpen(false);
   };
 
+  const goToStageWithTap = (nextStage: Stage) => {
+    playSfx("tap");
+    setStage(nextStage);
+  };
+
+  const handleHeaderBack = () => {
+    playSfx("tap");
+    setStage(stage === "order" ? "mood" : "order");
+  };
+
+  const switchCategory = (nextCategory: Category) => {
+    playSfx(activeCategory === nextCategory ? "tap" : "select");
+    setActiveCategory(nextCategory);
+  };
+
   const openItem = (item: MenuItem) => {
+    playSfx("tap");
     setEditingItem(item);
     setDraftChoices(getDefaultChoices(item));
   };
 
   const toggleChoice = (groupId: string, choiceId: string, type: "single" | "multi") => {
+    playSfx("select");
     setDraftChoices((current) => {
       const selected = current[groupId] ?? [];
       return {
@@ -875,7 +896,8 @@ function App() {
     });
   };
 
-  const addCartEntry = (item: MenuItem, selectedChoices = getDefaultChoices(item)) => {
+  const addCartEntry = (item: MenuItem, selectedChoices = getDefaultChoices(item), shouldPlaySfx = true) => {
+    if (shouldPlaySfx) playSfx("success");
     setCart((current) => {
       const key = JSON.stringify(selectedChoices);
       const existingIndex = current.findIndex((entry) => entry.item.id === item.id && JSON.stringify(entry.selectedChoices) === key);
@@ -889,8 +911,9 @@ function App() {
   };
 
   const addComboToCart = (combo: ComboRule) => {
+    playSfx("success");
     const items = getComboItems(combo).slice(0, combo.condition.minItems ?? 2);
-    items.forEach((item) => addCartEntry(item));
+    items.forEach((item) => addCartEntry(item, getDefaultChoices(item), false));
     if (items[0]) setActiveCategory(items[0].category);
   };
 
@@ -898,6 +921,7 @@ function App() {
     const presetItems = getMealPresetItems(preset);
     if (presetItems.length === 0) return;
 
+    playSfx("success");
     setCart((current) => {
       const next = [...current];
       presetItems.forEach((item) => {
@@ -917,6 +941,7 @@ function App() {
   };
 
   const adjustQuantity = (index: number, delta: number) => {
+    playSfx(delta > 0 ? "select" : "tap");
     setCart((current) =>
       current
         .map((entry, entryIndex) => (entryIndex === index ? { ...entry, quantity: entry.quantity + delta } : entry))
@@ -926,7 +951,8 @@ function App() {
 
   const confirmItem = () => {
     if (!editingItem) return;
-    addCartEntry(editingItem, draftChoices);
+    playSfx("success");
+    addCartEntry(editingItem, draftChoices, false);
     setEditingItem(null);
   };
 
@@ -948,6 +974,7 @@ function App() {
     setIsResolvingChoice(false);
     setPaymentStatus("idle");
     setPaymentMessage("");
+    setOrderPlacedAt((current) => current ?? Date.now());
     setStage("delivery");
   };
 
@@ -974,6 +1001,7 @@ function App() {
 
     playSfx("checkout");
     closeDrawers();
+    setOrderPlacedAt(Date.now());
     setPaymentStatus("scanning");
     setPaymentMessage(`本单实付 ¥${payablePrice}，正在核对小票。`);
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -1031,6 +1059,7 @@ function App() {
 
   const rollEscort = () => {
     if (!escortState || escortState.currentEvent || escortState.completed || escortState.view === "scene" || isRiderMoving) return;
+    playSfx("checkout");
     const next = advanceEscortGame(escortState, selectedDice);
     const movePath = next.lastMovePath ?? [next.positionIndex];
     const stepDelay = fastEscort ? 110 : 260;
@@ -1044,7 +1073,10 @@ function App() {
     if (movePath.length === 0) {
       setDisplayedEscortIndex(next.positionIndex);
       setIsRiderMoving(false);
-      if (next.completed) setStage("result");
+      if (next.completed) {
+        playSfx("result");
+        setStage("result");
+      }
       return;
     }
 
@@ -1056,22 +1088,30 @@ function App() {
     const settleTimer = window.setTimeout(() => {
       setDisplayedEscortIndex(next.positionIndex);
       setIsRiderMoving(false);
-      if (next.completed) setStage("result");
+      if (next.completed) {
+        playSfx("result");
+        setStage("result");
+      }
     }, stepDelay * (movePath.length + 1) + 90);
     movementTimersRef.current.push(settleTimer);
   };
 
   const resolveEscortChoice = (optionIds: string[]) => {
     if (!escortState?.currentEvent) return;
+    playSfx("select");
     const next = resolveEscortEvent(escortState, optionIds);
     setEscortState(next);
     setDisplayedEscortIndex(next.positionIndex);
     setDeliveryScore(next.score);
     setSelectedEvents(toJourneyEvents(next));
-    if (next.completed) setStage("result");
+    if (next.completed) {
+      playSfx("result");
+      setStage("result");
+    }
   };
 
   const togglePackagingChoice = (optionId: string) => {
+    playSfx("select");
     setPackagingSelection((current) => {
       if (current.includes(optionId)) return current.filter((id) => id !== optionId);
       if (current.length >= 2) return current;
@@ -1081,6 +1121,7 @@ function App() {
 
   const saveResult = async () => {
     if (!resultRef.current) return;
+    playSfx("tap");
     const dataUrl = await toPng(resultRef.current, { pixelRatio: 2, cacheBust: true });
     const link = document.createElement("a");
     link.download = `${summary.orderTitle}.png`;
@@ -1089,6 +1130,7 @@ function App() {
   };
 
   const copyShareText = async () => {
+    playSfx("tap");
     let copied = false;
     try {
       if (navigator.clipboard?.writeText) {
@@ -1113,10 +1155,12 @@ function App() {
 
     (window as Window & { __happyOrderLastShareText?: string }).__happyOrderLastShareText = summary.shareText;
     setShareCopied(copied);
+    if (copied) playSfx("success");
     window.setTimeout(() => setShareCopied(false), 1200);
   };
 
   const restart = () => {
+    playSfx("tap");
     if (coverTimerRef.current !== null) window.clearTimeout(coverTimerRef.current);
     clearPaymentTimers();
     setStage("cover");
@@ -1132,16 +1176,19 @@ function App() {
     setShareCopied(false);
     setPaymentStatus("idle");
     setPaymentMessage("");
+    setOrderPlacedAt(null);
     setIsCoverEntering(false);
   };
 
   const toggleCartDrawer = () => {
     if (cart.length === 0) return;
+    playSfx("tap");
     setIsCartOpen((open) => !open);
     setIsCouponOpen(false);
   };
 
   const toggleCouponDrawer = () => {
+    playSfx("tap");
     setIsCouponOpen((open) => !open);
     setIsCartOpen(true);
   };
@@ -1149,6 +1196,7 @@ function App() {
   const inflateCoupon = () => {
     const targetCoupon = boostTargetCoupon ?? boostedCoupons[0];
     if (!targetCoupon) return;
+    playSfx("success");
     const bonus = Math.floor(Math.random() * 8) + 3;
     setCouponBoost({ couponId: targetCoupon.id, bonus });
     setSelectedCouponId(targetCoupon.id);
@@ -1221,7 +1269,7 @@ function App() {
         {stage !== "cover" && (
           <header className="app-header">
             {stage !== "mood" ? (
-              <button className="icon-button" type="button" onClick={() => (stage === "order" ? setStage("mood") : setStage("order"))} aria-label="返回">
+              <button className="icon-button" type="button" onClick={handleHeaderBack} aria-label="返回">
                 <ChevronLeft size={18} />
               </button>
             ) : (
@@ -1359,7 +1407,7 @@ function App() {
             <div className="purpose-strip">
               <Megaphone size={18} />
               <span>今日下单目的：<b>{activeMood.label}</b>。{activeMood.line}</span>
-              <button type="button" onClick={() => setStage("mood")}>更换</button>
+              <button type="button" onClick={() => goToStageWithTap("mood")}>更换</button>
             </div>
 
             <section className="wallet-panel" aria-label="钱包">
@@ -1386,12 +1434,19 @@ function App() {
             <section className="combo-showcase" aria-label="超值搭配">
               <div className="section-heading">
                 <div>
-                  <h2>吃商线索套餐</h2>
-                  <p>按今日状态推荐，一键加入</p>
+                  <h2>今日线索套餐</h2>
+                  <p>横滑挑一组，一键加入</p>
                 </div>
                 <Tags size={18} />
               </div>
-              <div className="preset-cards">
+              <div
+                className="preset-cards"
+                onWheel={(event) => {
+                  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+                  event.currentTarget.scrollLeft += event.deltaY;
+                  event.preventDefault();
+                }}
+              >
                 {recommendedPresets.map(({ preset, items, price, presetCoupon, payable }, index) => (
                   <button key={preset.id} className={index === 0 ? "top-preset" : ""} type="button" onClick={() => addPresetToCart(preset)}>
                     <div className="preset-copy">
@@ -1425,7 +1480,7 @@ function App() {
                         className={category.id === activeCategory ? "active" : ""}
                         type="button"
                         style={{ "--category-accent": categoryVisuals[category.id].accent } as CSSProperties}
-                        onClick={() => setActiveCategory(category.id)}
+                        onClick={() => switchCategory(category.id)}
                       >
                         <span><Icon size={19} /></span>
                         {category.label}
@@ -1514,6 +1569,7 @@ function App() {
                   <button
                     type="button"
                     onClick={() => {
+                      playSfx("tap");
                       clearPaymentTimers();
                       setPaymentStatus("idle");
                       setPaymentMessage("");
@@ -1563,6 +1619,7 @@ function App() {
                               className={active ? "active" : ""}
                               type="button"
                               onClick={() => {
+                                playSfx("select");
                                 setSelectedCouponId(coupon.id);
                                 setIsCouponOpen(false);
                               }}
@@ -1620,7 +1677,7 @@ function App() {
                 <strong>{orderLiveStatusLabel}</strong>
                 <em>{orderLiveStatusTag}</em>
               </div>
-              <button type="button" onClick={() => setStage("order")} aria-label="修改订单">
+              <button type="button" onClick={() => goToStageWithTap("order")} aria-label="修改订单">
                 <ChevronLeft size={16} />
                 改订单
               </button>
@@ -1762,7 +1819,7 @@ function App() {
                 <h2>快乐护送棋</h2>
                 <p>一个骑手按顺序取货，把整单安全送到{escortState.destinationName}</p>
               </div>
-              <button type="button" onClick={() => setStage("order")}>
+              <button type="button" onClick={() => goToStageWithTap("order")}>
                 <ChevronLeft size={16} />
                 改订单
               </button>
@@ -1888,7 +1945,14 @@ function App() {
                       <strong>选择骰子</strong>
                       <span>{isRiderMoving ? "骑手正在逐格前进" : `当前选择：${selectedDiceConfig.name}`}</span>
                     </div>
-                    <button className={fastEscort ? "fast-toggle active" : "fast-toggle"} type="button" onClick={() => setFastEscort((value) => !value)}>
+                    <button
+                      className={fastEscort ? "fast-toggle active" : "fast-toggle"}
+                      type="button"
+                      onClick={() => {
+                        playSfx("tap");
+                        setFastEscort((value) => !value);
+                      }}
+                    >
                       加速护送
                     </button>
                   </div>
@@ -1898,7 +1962,10 @@ function App() {
                         className={selectedDice === dice.id ? "selected" : ""}
                         key={dice.id}
                         type="button"
-                        onClick={() => setSelectedDice(dice.id)}
+                        onClick={() => {
+                          playSfx("select");
+                          setSelectedDice(dice.id);
+                        }}
                         disabled={isRiderMoving}
                       >
                         <span className="dice-cube">{dice.id === "steady" ? "1" : dice.id === "speedy" ? "6" : "4"}</span>
@@ -1995,156 +2062,27 @@ function App() {
         {stage === "result" && (
           <section className="result-screen">
             <div className="result-card premium-result" ref={resultRef}>
-              <section className="gold-receipt" aria-label="快乐订单小票">
-                <div className="receipt-glow" />
-                <div className="ticket-head">
-                  <div className="ticket-brand">
-                    <div className="ticket-avatar">单</div>
-                    <div>
-                      <span>快乐下单事务所</span>
-                      <small>HAPPY ORDER OFFICE</small>
-                    </div>
-                  </div>
-                  <strong>{summary.receipt.status}</strong>
-                </div>
-                <div className="ticket-title">
-                  <span>GOLDEN ORDER RECEIPT</span>
-                  <h2>{summary.receipt.orderTitle}</h2>
-                  <p>{summary.receipt.purpose}</p>
-                  <em>吃商样本已封存</em>
-                </div>
-
-                <div className="receipt-meta-grid">
-                  <div>
-                    <span>订单金额</span>
-                    <strong>¥{summary.receipt.amount}</strong>
-                  </div>
-                  <div>
-                    <span>触发组合</span>
-                    <strong>{summary.receipt.combos[0] ?? "自由发挥"}</strong>
-                  </div>
-                </div>
-
-                <div className="receipt-main-list">
-                  <div className="receipt-list-head">
-                    <ReceiptText size={16} />
-                    <span>点单内容</span>
-                  </div>
-                  {summary.receipt.items.map((item) => (
-                    <div className="receipt-list-line" key={item}>
-                      <span>{item}</span>
-                      <i />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="receipt-choice-ledger">
-                  <div className="receipt-list-head">
-                    <BadgeCheck size={16} />
-                    <span>互动证据</span>
-                  </div>
-                  {summary.receipt.choices.slice(0, 8).map((choice, index) => (
-                    <div className="receipt-proof-line" key={`${choice}-${index}`}>
-                      <b>{String(index + 1).padStart(2, "0")}</b>
-                      <span>{choice}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="score-trio">
-                  {summary.receipt.indexes.map((item) => (
-                    <div key={item.label}>
-                      {item.label.includes("快乐") ? <Sparkles size={18} /> : item.label.includes("负担") ? <HeartPulse size={18} /> : <ShieldCheck size={18} />}
-                      <strong>{item.value}</strong>
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="receipt-evidence-paper">
-                  {summary.receipt.evidence.map((line) => (
-                    <p key={`${line.type}-${line.label}`}>
-                      <b>{line.label}</b>
-                      <span>{line.text}</span>
-                    </p>
-                  ))}
-                  <div className="barcode" aria-hidden="true" />
-                </div>
-              </section>
-
-              <div className="result-divider">
-                <span>继续下滑解锁吃商人格</span>
-              </div>
-
-              <section
-                className={`persona-card rarity-${summary.foodPersona.rarity.key}`}
-                aria-label="美食人格 MBTI"
-                style={{ "--persona-grid-image": `url(${chiShangGrid})` } as CSSProperties}
-              >
-                <div className="persona-visual">
-                  <div
-                    className="persona-avatar-sprite"
-                    aria-hidden="true"
-                    style={
-                      {
-                        "--avatar-x": summary.foodPersona.avatarPosition.x,
-                        "--avatar-y": summary.foodPersona.avatarPosition.y
-                      } as CSSProperties
-                    }
-                  >
-                    <img src={chiShangGrid} alt="" />
-                  </div>
-                  <div>
-                    <span>你的吃商人格</span>
-                    <strong>{summary.foodPersona.displayName}</strong>
-                    <small>{summary.foodPersona.variantTitle}</small>
-                  </div>
-                </div>
-                <div className="persona-confidence">
-                  <span>
-                    {summary.foodPersona.rarity.level === "Hidden" ? "Hidden" : `Lv.${summary.foodPersona.rarity.level}`} · {summary.foodPersona.rarity.label}
-                  </span>
-                  <b>{summary.foodPersona.dominantAxis.leaningLabel}</b>
-                </div>
-                <div className="persona-level-note">{summary.foodPersona.rarity.reason}</div>
-                <p>{summary.foodPersona.description}</p>
-                <div className="persona-logic-note">
-                  点单内容决定吃商底色；订单进行中的选择决定过程修正和变体称号。过程指数只辅助强化 C/E、G/R 等轴，不会单独决定人格。
-                </div>
-                <div className="persona-evidence-list">
-                  {summary.personaExplanation.evidenceLines.map((line) => (
-                    <div key={`${line.type}-${line.label}`}>
-                      <span>{line.label}</span>
-                      <p>{line.text}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="variant-reason">
-                  <Sparkles size={17} />
-                  <span>{summary.foodPersona.variantReason}</span>
-                </div>
-                <div className="axis-list">
-                  {summary.foodPersona.axes.map((axis) => (
-                    <div className="axis-row" key={axis.key}>
-                      <div>
-                        <span>{axis.leftLabel}</span>
-                        <b>{axis.codeLetter}</b>
-                        <span>{axis.rightLabel}</span>
-                      </div>
-                      <i><em style={{ left: `${axis.value}%` }} /></i>
-                    </div>
-                  ))}
-                </div>
-                <div className="persona-badges">
-                  {summary.badges.map((badge) => (
-                    <span key={badge}>{badge}</span>
-                  ))}
-                </div>
-                <div className="next-tip">
-                  <HeartPulse size={18} />
-                  <span>{summary.nextTip}</span>
-                </div>
-              </section>
+              <ResultRevealPanel
+                receiptProps={{
+                  entries: cart,
+                  totals,
+                  combos,
+                  couponDiscount,
+                  baseCouponDiscount,
+                  couponBoostDiscount,
+                  selectedCouponLabel: selectedCoupon?.label,
+                  payablePrice,
+                  deliveryScore,
+                  orderPlacedAt,
+                  summary
+                }}
+                currentPersona={summary.foodPersona}
+                badges={summary.badges}
+                nextTip={summary.nextTip}
+                gridImage={chiShangGrid}
+                onShare={copyShareText}
+                shareCopied={shareCopied}
+              />
             </div>
             <div className="result-actions">
               <button type="button" onClick={saveResult}>
@@ -2198,7 +2136,15 @@ function App() {
                 </fieldset>
               ))}
               <div className="sheet-actions">
-                <button type="button" onClick={() => setEditingItem(null)}>取消</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSfx("tap");
+                    setEditingItem(null);
+                  }}
+                >
+                  取消
+                </button>
                 <button type="button" onClick={confirmItem}>
                   <Utensils size={16} />
                   加入快乐订单
