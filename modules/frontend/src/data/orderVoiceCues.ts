@@ -1,4 +1,5 @@
 import type { OrderProgressEvent } from "../types";
+import { publicAssetPath } from "../lib/publicAssetPath";
 
 export type OrderVoiceRole = "merchant" | "rider" | "system";
 
@@ -149,7 +150,8 @@ const cueOverrides: Record<string, string> = {
   "a-extra-next-order": "这单结束，复盘一下。"
 };
 
-export const orderVoiceAssetPath = (eventId: string) => `/audio/voice/order-progress/${eventId}/message.mp3`;
+export const orderVoiceAssetPath = (eventId: string) =>
+  publicAssetPath(`audio/voice/order-progress/${eventId}/message.mp3`);
 
 export const getOrderVoiceRole = (sender: string): OrderVoiceRole => {
   if (sender === "骑手") return "rider";
