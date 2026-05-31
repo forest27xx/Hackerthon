@@ -10,7 +10,7 @@ describe("orderVoiceCues", () => {
       expect(cue, event.id).toBeTruthy();
       expect(cue?.text.length, event.id).toBeLessThanOrEqual(24);
       expect(cue?.src).toBe(orderVoiceAssetPath(event.id));
-      expect(cue?.src).toBe(`/audio/voice/order-progress/${event.id}/message.mp3`);
+      expect(cue?.src).toBe(`${import.meta.env.BASE_URL}audio/voice/order-progress/${event.id}/message.mp3`);
     });
   });
 

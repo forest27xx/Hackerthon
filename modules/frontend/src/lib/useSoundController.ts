@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrderVoiceCue, OrderVoiceRole } from "../data/orderVoiceCues";
+import { publicAssetPath } from "./publicAssetPath";
 
 export type SfxType = "tap" | "select" | "checkout" | "success" | "result";
 
-const BGM_SRC = "/audio/bgm/main-bgm.mp3";
-const BUTTON_CLICK_SRC = "/audio/sfx/button-click.mp3";
+const BGM_SRC = publicAssetPath("audio/bgm/main-bgm.mp3");
+const BUTTON_CLICK_SRC = publicAssetPath("audio/sfx/button-click.mp3");
 const BUTTON_SFX_DEDUPE_MS = 90;
 
 const sfxProfiles: Record<SfxType, { frequency: number; endFrequency: number; duration: number; volume: number }> = {
