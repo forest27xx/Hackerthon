@@ -26,7 +26,11 @@ const fallbackImages: Record<Category, string> = {
   snack: "https://images.unsplash.com/photo-1562967914-608f82629710?auto=format&fit=crop&w=640&q=80",
   nightFood: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=640&q=80",
   lightFood: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=640&q=80",
-  activity: "https://images.unsplash.com/photo-1511882150382-421056c89033?auto=format&fit=crop&w=640&q=80"
+  activity: "https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?auto=format&fit=crop&w=640&q=80",
+  staple: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=640&q=80",
+  stirFry: "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=640&q=80",
+  soupPot: "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=640&q=80",
+  other: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=640&q=80"
 };
 
 export const resolveMenuImage = (item: MenuItem) => {

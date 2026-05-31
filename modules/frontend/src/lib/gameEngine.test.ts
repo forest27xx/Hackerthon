@@ -7,7 +7,8 @@ import {
   generateResultSummary,
   pickDeliveryEvents
 } from "./gameEngine";
-import type { ComboRule, DeliveryEvent, MenuItem, Mood } from "../types";
+import { foodPersonaTypes, personaAvatarPositions } from "../data/foodPersonas";
+import type { CartEntry, ComboRule, DeliveryEvent, MenuItem, Mood } from "../types";
 
 const baseStats = {
   joy: 0,
@@ -192,9 +193,20 @@ describe("gameEngine", () => {
     expect(summary.orderTitle).toBe("工作日精神急救订单");
     expect(summary.persona).toContain("加班续命包");
     expect(summary.shareText).toContain("快乐指数");
-    expect(summary.receiptLines).toContain("配送博弈：封口机临时故障 / 饭后久坐预警");
+    expect(summary.receiptLines).toContain("订单沟通：封口机临时故障 / 饭后久坐预警");
     expect(summary.foodPersona.code).toHaveLength(4);
     expect(summary.journeyLines.join(" / ")).toContain("今日下单目的");
+    expect(summary.receipt.amount).toBe(34);
+    expect(summary.receipt.items).toEqual(["厚芋泥波波x1", "盐酥鸡x1"]);
+    expect(summary.receipt.choices).toEqual(["等重新封口", "下楼散步取餐"]);
+    expect(summary.personaExplanation.evidenceLines.map((line) => line.type)).toEqual(
+      expect.arrayContaining(["order", "decision", "result"])
+    );
+    expect(summary.foodPersona.evidenceLines).toHaveLength(3);
+    expect(summary.foodPersona.variantReason).toContain(summary.foodPersona.variantTitle);
+    expect(summary.foodPersona.avatarKey).toBeTruthy();
+    expect(summary.foodPersona.avatarPosition).toEqual(personaAvatarPositions[summary.foodPersona.code]);
+    expect(summary.foodPersona.confidenceLabel).toMatch(/证据|样本/);
   });
 
   it("generates a stable food persona from the same purpose, cart, and choices", () => {
@@ -232,6 +244,42 @@ describe("gameEngine", () => {
     expect(persona.axes).toHaveLength(4);
   });
 
+  it("provides complete copy for all 16 food persona codes", () => {
+    expect(Object.keys(foodPersonaTypes).sort()).toEqual([
+      "EIBC",
+      "EIBN",
+      "EIFC",
+      "EIFN",
+      "ESBC",
+      "ESBN",
+      "ESFC",
+      "ESFN",
+      "RIBC",
+      "RIBN",
+      "RIFC",
+      "RIFN",
+      "RSBC",
+      "RSBN",
+      "RSFC",
+      "RSFN"
+    ]);
+
+    Object.values(foodPersonaTypes).forEach((persona) => {
+      expect(persona.name).toBeTruthy();
+      expect(persona.description.length).toBeGreaterThan(12);
+      expect(persona.keywords.length).toBeGreaterThanOrEqual(4);
+      expect(persona.nextOrder).toBeTruthy();
+    });
+    expect(Object.keys(personaAvatarPositions).sort()).toEqual(Object.keys(foodPersonaTypes).sort());
+    expect(new Set(Object.values(personaAvatarPositions).map((position) => `${position.x},${position.y}`)).size).toBe(16);
+    Object.values(personaAvatarPositions).forEach((position) => {
+      expect(position.x).toBeGreaterThanOrEqual(0);
+      expect(position.x).toBeLessThan(4);
+      expect(position.y).toBeGreaterThanOrEqual(0);
+      expect(position.y).toBeLessThan(4);
+    });
+  });
+
   it("adds persona badges from health and safety choices", () => {
     const persona = generateFoodPersona({
       mood: "afterWorkout" as Mood,
@@ -247,5 +295,48 @@ describe("gameEngine", () => {
     });
 
     expect(persona.badges).toEqual(expect.arrayContaining(["健康顾问", "安心守护者", "守护骑手"]));
+  });
+
+  it("explains persona variants from different decision evidence", () => {
+    const sharedInput: Omit<Parameters<typeof generateFoodPersona>[0], "selectedEvents"> = {
+      mood: "overtime" as Mood,
+      entries: [
+        { item: drink, quantity: 1, selectedChoices: { sugar: ["half"], toppings: ["cup"] } },
+        { item: snack, quantity: 1, selectedChoices: {} }
+      ] satisfies CartEntry[],
+      combos: [comboRules[0]],
+      deliveryScore: { speed: 48, safety: 64, health: 63, integrity: 66, trust: 65 },
+      finalScores: { joyIndex: 76, healthIndex: 72, safetyIndex: 82 },
+      statsWithCombo: { joy: 44, health: 3, fullness: 20, energy: 13, safety: 10 }
+    };
+
+    const careful = generateFoodPersona({
+      ...sharedInput,
+      selectedEvents: [
+        {
+          eventTitle: "冷热要不要分袋",
+          choiceLabel: "冷热分袋，慢一点也行",
+          eventType: "packaging" as const,
+          badges: ["包装完整主义者"],
+          personaEffect: { driver: -5, discipline: -4, novelty: -4 }
+        }
+      ]
+    });
+    const friendly = generateFoodPersona({
+      ...sharedInput,
+      selectedEvents: [
+        {
+          eventTitle: "预计晚到四分钟",
+          choiceLabel: "安全第一不催单",
+          eventType: "riderSafety" as const,
+          badges: ["骑手友好派"],
+          personaEffect: { scene: 5, driver: -4, discipline: -3 }
+        }
+      ]
+    });
+
+    expect(careful.variantTitle).not.toBe(friendly.variantTitle);
+    expect(careful.variantReason).toContain("冷热分袋");
+    expect(friendly.variantReason).toContain("安全第一");
   });
 });
