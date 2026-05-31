@@ -88,6 +88,7 @@ import {
 } from "./lib/orderProgressEngine";
 import { missingLocalImageKeys, resolveMenuImage } from "./lib/menuImages";
 import { useSoundController } from "./lib/useSoundController";
+import { FinalPersonaReceipt } from "./components/FinalPersonaReceipt";
 import type {
   CartEntry,
   Category,
@@ -551,9 +552,14 @@ function App() {
   const [isResolvingChoice, setIsResolvingChoice] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [orderPlacedAt, setOrderPlacedAt] = useState<number | null>(null);
   const [isCoverEntering, setIsCoverEntering] = useState(false);
   const [selectedMoodFeedback, setSelectedMoodFeedback] = useState<Mood | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
+  const resultScreenRef = useRef<HTMLElement | null>(null);
+  const personaCardRef = useRef<HTMLElement | null>(null);
+  const resultTouchStartYRef = useRef(0);
+  const resultPersonaAutoScrolledRef = useRef(false);
   const movementTimersRef = useRef<number[]>([]);
   const orderChoiceTimerRef = useRef<number | null>(null);
   const paymentTimersRef = useRef<number[]>([]);
@@ -587,6 +593,8 @@ function App() {
     [boostedCoupons, selectedCoupon, selectedCouponId]
   );
   const couponDiscount = selectedCoupon?.discount ?? 0;
+  const couponBoostDiscount = selectedCoupon && couponBoost?.couponId === selectedCoupon.id ? couponBoost.bonus : 0;
+  const baseCouponDiscount = Math.max(0, couponDiscount - couponBoostDiscount);
   const payablePrice = Math.max(0, totals.price - couponDiscount);
   const walletRemaining = walletLimit - payablePrice;
   const walletCanPay = cart.length > 0 && walletRemaining >= 0;
@@ -948,6 +956,7 @@ function App() {
     setIsResolvingChoice(false);
     setPaymentStatus("idle");
     setPaymentMessage("");
+    setOrderPlacedAt((current) => current ?? Date.now());
     setStage("delivery");
   };
 
@@ -974,6 +983,7 @@ function App() {
 
     playSfx("checkout");
     closeDrawers();
+    setOrderPlacedAt(Date.now());
     setPaymentStatus("scanning");
     setPaymentMessage(`本单实付 ¥${payablePrice}，正在核对小票。`);
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -1088,6 +1098,43 @@ function App() {
     link.click();
   };
 
+  const canRevealPersonaCard = () => {
+    const screen = resultScreenRef.current;
+    const personaCard = personaCardRef.current;
+    if (!screen || !personaCard || resultPersonaAutoScrolledRef.current) return false;
+    const screenRect = screen.getBoundingClientRect();
+    const cardRect = personaCard.getBoundingClientRect();
+    return cardRect.top > screenRect.top + 24;
+  };
+
+  const revealPersonaCard = () => {
+    const screen = resultScreenRef.current;
+    const personaCard = personaCardRef.current;
+    if (!screen || !personaCard || !canRevealPersonaCard()) return;
+    const screenRect = screen.getBoundingClientRect();
+    const cardRect = personaCard.getBoundingClientRect();
+    resultPersonaAutoScrolledRef.current = true;
+    screen.scrollTo({
+      top: screen.scrollTop + cardRect.top - screenRect.top,
+      behavior: "smooth"
+    });
+  };
+
+  const handleResultWheel = (event: ReactWheelEvent<HTMLElement>) => {
+    if (event.deltaY <= 8) return;
+    revealPersonaCard();
+  };
+
+  const handleResultTouchStart = (event: ReactTouchEvent<HTMLElement>) => {
+    resultTouchStartYRef.current = event.touches[0]?.clientY ?? 0;
+  };
+
+  const handleResultTouchMove = (event: ReactTouchEvent<HTMLElement>) => {
+    const currentY = event.touches[0]?.clientY ?? resultTouchStartYRef.current;
+    if (resultTouchStartYRef.current - currentY <= 12) return;
+    revealPersonaCard();
+  };
+
   const copyShareText = async () => {
     let copied = false;
     try {
@@ -1132,6 +1179,7 @@ function App() {
     setShareCopied(false);
     setPaymentStatus("idle");
     setPaymentMessage("");
+    setOrderPlacedAt(null);
     setIsCoverEntering(false);
   };
 
@@ -1214,6 +1262,10 @@ function App() {
       document.removeEventListener("scroll", closeOnScroll, { capture: true });
     };
   }, [isCartOpen, isCouponOpen, stage]);
+
+  useEffect(() => {
+    if (stage === "result") resultPersonaAutoScrolledRef.current = false;
+  }, [stage]);
 
   return (
     <main className="page-shell">
@@ -1576,6 +1628,10 @@ function App() {
                       ) : (
                         <p>{nextCoupon ? `再点¥${nextCoupon.threshold - totals.price}可用` : "暂无红包"}</p>
                       )}
+                      <button className="coupon-boost-drawer-card" type="button" onClick={inflateCoupon}>
+                        <b>神券膨胀 {couponBoostDiscount > 0 ? `+¥${couponBoostDiscount}` : "随机+3-10"}</b>
+                        <span>{boostTargetCoupon ? `加成到 ${boostTargetCoupon.label}，会单独写进最终小票` : "选择红包后可叠加神券"}</span>
+                      </button>
                     </div>
                   )}
                 </section>
@@ -1993,84 +2049,27 @@ function App() {
         )}
 
         {stage === "result" && (
-          <section className="result-screen">
+          <section
+            className="result-screen"
+            ref={resultScreenRef}
+            onWheel={handleResultWheel}
+            onTouchStart={handleResultTouchStart}
+            onTouchMove={handleResultTouchMove}
+          >
             <div className="result-card premium-result" ref={resultRef}>
-              <section className="gold-receipt" aria-label="快乐订单小票">
-                <div className="receipt-glow" />
-                <div className="ticket-head">
-                  <div className="ticket-brand">
-                    <div className="ticket-avatar">单</div>
-                    <div>
-                      <span>快乐下单事务所</span>
-                      <small>HAPPY ORDER OFFICE</small>
-                    </div>
-                  </div>
-                  <strong>{summary.receipt.status}</strong>
-                </div>
-                <div className="ticket-title">
-                  <span>GOLDEN ORDER RECEIPT</span>
-                  <h2>{summary.receipt.orderTitle}</h2>
-                  <p>{summary.receipt.purpose}</p>
-                  <em>吃商样本已封存</em>
-                </div>
-
-                <div className="receipt-meta-grid">
-                  <div>
-                    <span>订单金额</span>
-                    <strong>¥{summary.receipt.amount}</strong>
-                  </div>
-                  <div>
-                    <span>触发组合</span>
-                    <strong>{summary.receipt.combos[0] ?? "自由发挥"}</strong>
-                  </div>
-                </div>
-
-                <div className="receipt-main-list">
-                  <div className="receipt-list-head">
-                    <ReceiptText size={16} />
-                    <span>点单内容</span>
-                  </div>
-                  {summary.receipt.items.map((item) => (
-                    <div className="receipt-list-line" key={item}>
-                      <span>{item}</span>
-                      <i />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="receipt-choice-ledger">
-                  <div className="receipt-list-head">
-                    <BadgeCheck size={16} />
-                    <span>互动证据</span>
-                  </div>
-                  {summary.receipt.choices.slice(0, 8).map((choice, index) => (
-                    <div className="receipt-proof-line" key={`${choice}-${index}`}>
-                      <b>{String(index + 1).padStart(2, "0")}</b>
-                      <span>{choice}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="score-trio">
-                  {summary.receipt.indexes.map((item) => (
-                    <div key={item.label}>
-                      {item.label.includes("快乐") ? <Sparkles size={18} /> : item.label.includes("负担") ? <HeartPulse size={18} /> : <ShieldCheck size={18} />}
-                      <strong>{item.value}</strong>
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="receipt-evidence-paper">
-                  {summary.receipt.evidence.map((line) => (
-                    <p key={`${line.type}-${line.label}`}>
-                      <b>{line.label}</b>
-                      <span>{line.text}</span>
-                    </p>
-                  ))}
-                  <div className="barcode" aria-hidden="true" />
-                </div>
-              </section>
+              <FinalPersonaReceipt
+                entries={cart}
+                totals={totals}
+                combos={combos}
+                couponDiscount={couponDiscount}
+                baseCouponDiscount={baseCouponDiscount}
+                couponBoostDiscount={couponBoostDiscount}
+                selectedCouponLabel={selectedCoupon?.label}
+                payablePrice={payablePrice}
+                deliveryScore={deliveryScore}
+                orderPlacedAt={orderPlacedAt}
+                summary={summary}
+              />
 
               <div className="result-divider">
                 <span>继续下滑解锁吃商人格</span>
@@ -2078,6 +2077,7 @@ function App() {
 
               <section
                 className={`persona-card rarity-${summary.foodPersona.rarity.key}`}
+                ref={personaCardRef}
                 aria-label="美食人格 MBTI"
                 style={{ "--persona-grid-image": `url(${chiShangGrid})` } as CSSProperties}
               >
