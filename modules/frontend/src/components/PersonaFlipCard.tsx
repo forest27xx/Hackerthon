@@ -17,10 +17,25 @@ interface PersonaAvatarSpriteProps {
   className?: string;
 }
 
+interface PersonaTypeTitleProps {
+  code: string;
+  name: string;
+  className?: string;
+}
+
 const personaCodes = Object.keys(foodPersonaTypes);
 
 function getPersonaDisplayName(persona: FoodPersonaType) {
   return `${persona.code} ${persona.name}`;
+}
+
+function PersonaTypeTitle({ code, name, className = "" }: PersonaTypeTitleProps) {
+  return (
+    <span className={`persona-type-title ${className}`.trim()}>
+      <span className="persona-type-code">{code}</span>
+      <span className="persona-type-name">{name}</span>
+    </span>
+  );
 }
 
 function PersonaAvatarSprite({ code, gridImage, label, className = "" }: PersonaAvatarSpriteProps) {
@@ -69,7 +84,7 @@ export function PersonaFlipCard({ currentPersona, badges, nextTip, gridImage }: 
                 <PersonaAvatarSprite code={currentPersona.code} gridImage={gridImage} label={currentPersona.displayName} />
                 <div>
                   <span>你的吃商人格</span>
-                  <strong>{currentPersona.displayName}</strong>
+                  <PersonaTypeTitle code={currentPersona.code} name={currentPersona.name} className="persona-hero-title" />
                   <small>{currentPersona.variantTitle}</small>
                 </div>
               </div>
@@ -151,8 +166,7 @@ export function PersonaFlipCard({ currentPersona, badges, nextTip, gridImage }: 
                       onClick={() => setSelectedCode(code)}
                     >
                       <PersonaAvatarSprite code={code} gridImage={gridImage} label={getPersonaDisplayName(persona)} className="persona-index-sprite" />
-                      <span>{persona.code}</span>
-                      <b>{persona.name}</b>
+                      <PersonaTypeTitle code={persona.code} name={persona.name} className="persona-index-title" />
                     </button>
                   );
                 })}
@@ -162,7 +176,7 @@ export function PersonaFlipCard({ currentPersona, badges, nextTip, gridImage }: 
                 <PersonaAvatarSprite code={selectedPersona.code} gridImage={gridImage} label={selectedDisplayName} className="persona-detail-sprite" />
                 <div>
                   <span>{selectedCode === currentPersona.code ? "当前结果" : "图鉴人格"}</span>
-                  <strong>{selectedDisplayName}</strong>
+                  <PersonaTypeTitle code={selectedPersona.code} name={selectedPersona.name} className="persona-detail-title" />
                   <small>{selectedPersona.shortLine}</small>
                 </div>
                 <p>{selectedPersona.description}</p>

@@ -124,6 +124,13 @@ const tagAxisWeights: Record<string, Partial<Record<PersonaAxisKey, number>>> = 
   energy: { restraint: -1 }
 };
 
+const personaAxisBaseBias: Record<PersonaAxisKey, number> = {
+  structure: -12,
+  restraint: 0,
+  control: -7,
+  deal: -9
+};
+
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(value)));
 
 const emptyPersonaScores = (): Record<PersonaAxisKey, number> => ({
@@ -321,7 +328,7 @@ const buildPersonaAxes = (scores: Record<PersonaAxisKey, number>): PersonaAxisSc
     return {
       ...meta,
       value,
-      codeLetter: value >= 50 ? meta.leftCode : meta.rightCode
+      codeLetter: value > 50 ? meta.leftCode : meta.rightCode
     };
   });
 };
@@ -557,6 +564,7 @@ export const generateFoodPersona = ({
   const facts = collectOrderFacts(entries);
   const rawScores = emptyPersonaScores();
 
+  addAxisScores(rawScores, personaAxisBaseBias);
   addAxisScores(rawScores, moodAxisWeights[mood]);
   facts.tags.forEach((tag) => addAxisScores(rawScores, tagAxisWeights[tag] ?? {}));
   entries.forEach((entry) => {
@@ -572,49 +580,52 @@ export const generateFoodPersona = ({
         addAxisScores(rawScores, { restraint: -6 });
       }
       if (/杯托|密封|分袋|分装|保温|餐具|杯套|防漏|标注|加固/.test(label)) {
-        addAxisScores(rawScores, { control: 7 });
+        addAxisScores(rawScores, { control: 5 });
       }
       if (/默认|普通|正常/.test(label)) {
-        addAxisScores(rawScores, { control: -1 });
+        addAxisScores(rawScores, { control: -2 });
       }
       if ((choice.priceDelta ?? 0) > 0 && (choice.priceDelta ?? 0) <= 3) {
-        addAxisScores(rawScores, { deal: 2 });
+        addAxisScores(rawScores, { deal: 1 });
       }
       if ((choice.priceDelta ?? 0) >= 5) {
-        addAxisScores(rawScores, { deal: -1 });
+        addAxisScores(rawScores, { deal: -2 });
       }
     });
   });
 
-  rawScores.structure += facts.uniqueCategoryCount * 3 + (facts.hasDrink && facts.hasFood ? 5 : 0) + (facts.itemCount >= 4 ? 4 : 0);
-  rawScores.structure += facts.structureSignals ? 4 : 0;
-  rawScores.structure -= facts.singleSignals ? 8 : 0;
+  rawScores.structure += facts.uniqueCategoryCount * 2 + (facts.hasDrink && facts.hasFood ? 3 : 0) + (facts.itemCount >= 4 ? 3 : 0);
+  rawScores.structure += facts.structureSignals ? 2 : 0;
+  rawScores.structure -= facts.singleSignals ? 12 : 0;
+  if (facts.itemCount <= 2 && !facts.hasDrink && !facts.tags.has("share") && !facts.tags.has("combo")) {
+    rawScores.structure -= 4;
+  }
   rawScores.restraint += statsWithCombo.health * 0.12 + statsWithCombo.safety * 0.04 - statsWithCombo.joy * 0.06 - statsWithCombo.fullness * 0.04;
-  rawScores.control += statsWithCombo.safety * 0.1 + facts.controlSignals.length * 2;
-  rawScores.deal += facts.dealSignals.length * 5;
-  rawScores.deal += dealDiscount > 0 ? Math.min(14, dealDiscount * 1.2) : -4;
-  rawScores.deal += rawPrice && dealDiscount / rawPrice >= 0.14 ? 5 : 0;
+  rawScores.control += statsWithCombo.safety * 0.06 + facts.controlSignals.length * 1.5;
+  rawScores.deal += facts.dealSignals.length * 4;
+  rawScores.deal += dealDiscount > 0 ? Math.min(18, dealDiscount * 1.5) : -8;
+  rawScores.deal += rawPrice && dealDiscount / rawPrice >= 0.14 ? 6 : 0;
 
   combos.forEach((combo) => {
-    rawScores.structure += 3;
-    if (/防撒漏|不翻车|安全|完整|分装/.test(combo.name + combo.description)) rawScores.control += 4;
+    rawScores.structure += 1;
+    if (/防撒漏|不翻车|安全|完整|分装/.test(combo.name + combo.description)) rawScores.control += 2;
     if (/低糖|自律|恢复|清爽/.test(combo.name + combo.description)) rawScores.restraint += 4;
     if (/发疯|罪恶|辣|甜|加料/.test(combo.name + combo.description)) rawScores.restraint -= 4;
   });
 
-  rawScores.control += Math.max(0, deliveryScore.safety - 50) * 0.1;
-  rawScores.control += Math.max(0, deliveryScore.integrity - 50) * 0.12;
-  rawScores.control += Math.max(0, deliveryScore.trust - 50) * 0.08;
+  rawScores.control += Math.max(0, deliveryScore.safety - 50) * 0.07;
+  rawScores.control += Math.max(0, deliveryScore.integrity - 50) * 0.08;
+  rawScores.control += Math.max(0, deliveryScore.trust - 50) * 0.05;
   rawScores.restraint += Math.max(0, deliveryScore.health - 50) * 0.13;
   rawScores.restraint += Math.max(0, deliveryScore.safety - 50) * 0.04;
 
   selectedEvents.forEach((event) => {
     if (event.personaEffect) addAxisScores(rawScores, event.personaEffect);
-    if (event.eventType === "fun") addAxisScores(rawScores, { structure: 2, restraint: -2, control: -1 });
+    if (event.eventType === "fun") addAxisScores(rawScores, { structure: 1, restraint: -2, control: -2 });
     if (event.eventType === "healthyLife") addAxisScores(rawScores, { restraint: 7 });
-    if (event.eventType === "riderSafety") addAxisScores(rawScores, { control: 7, restraint: 2 });
+    if (event.eventType === "riderSafety") addAxisScores(rawScores, { control: 4, restraint: 2 });
     if (event.eventType === "packaging" || event.eventType === "foodSafety") {
-      addAxisScores(rawScores, { control: 7 });
+      addAxisScores(rawScores, { control: 4 });
     }
 
     if (event.choiceLabel.includes("拼单") || event.choiceLabel.includes("分享")) addAxisScores(rawScores, { structure: 7 });
@@ -625,16 +636,16 @@ export const generateFoodPersona = ({
       addAxisScores(rawScores, { restraint: 8 });
     }
     if (/加购|满减|券|凑/.test(event.choiceLabel + event.eventTitle)) {
-      addAxisScores(rawScores, { deal: 8 });
+      addAxisScores(rawScores, { deal: 10 });
     }
     if (/不为券|不凑|不加购/.test(event.choiceLabel)) {
-      addAxisScores(rawScores, { deal: -10 });
+      addAxisScores(rawScores, { deal: -14 });
     }
     if (/快|直接|同袋|不用|相信命运|接受原单|先吃|不管/.test(event.choiceLabel)) {
-      addAxisScores(rawScores, { control: -5, restraint: -2 });
+      addAxisScores(rawScores, { control: -8, restraint: -2 });
     }
     if (/安全|不急|分袋|加固|密封|标记|核对|定位|拍照|前台|楼下|重做|确认/.test(event.choiceLabel)) {
-      addAxisScores(rawScores, { control: 7 });
+      addAxisScores(rawScores, { control: 5 });
     }
   });
 

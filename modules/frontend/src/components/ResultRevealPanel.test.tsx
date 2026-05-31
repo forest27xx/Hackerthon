@@ -109,7 +109,9 @@ describe("ResultRevealPanel", () => {
     await user.click(screen.getByRole("button", { name: "查看我的吃商人格" }));
 
     expect(screen.getByText("你的吃商人格")).toBeInTheDocument();
-    expect(screen.getByText("HCGL 完成度洁癖症")).toBeInTheDocument();
+    expect(screen.getByText("HCGL")).toBeInTheDocument();
+    expect(screen.getByText("完成度洁癖症")).toBeInTheDocument();
+    expect(screen.queryByText("HCGL 完成度洁癖症")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "查看16型图鉴" }));
     expect(screen.getByText("EATI 16 型图鉴")).toBeInTheDocument();

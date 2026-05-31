@@ -42,7 +42,9 @@ describe("PersonaFlipCard", () => {
     );
 
     expect(screen.getByText("你的吃商人格")).toBeInTheDocument();
-    expect(screen.getByText("HCGL 完成度洁癖症")).toBeInTheDocument();
+    expect(screen.getByText("HCGL")).toBeInTheDocument();
+    expect(screen.getByText("完成度洁癖症")).toBeInTheDocument();
+    expect(screen.queryByText("HCGL 完成度洁癖症")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "查看16型图鉴" }));
 
@@ -51,12 +53,14 @@ describe("PersonaFlipCard", () => {
 
     await user.click(screen.getByRole("button", { name: /查看人格 NERL 随缘重口怪/ }));
 
-    expect(screen.getByText("NERL 随缘重口怪")).toBeInTheDocument();
+    expect(screen.getAllByText("NERL").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("随缘重口怪").length).toBeGreaterThan(0);
     expect(screen.getByText(/你会被一个清晰的重口需求牵引/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "回到我的结果" }));
 
     expect(screen.getByText("你的吃商人格")).toBeInTheDocument();
-    expect(screen.getByText("HCGL 完成度洁癖症")).toBeInTheDocument();
+    expect(screen.getByText("HCGL")).toBeInTheDocument();
+    expect(screen.getByText("完成度洁癖症")).toBeInTheDocument();
   });
 });

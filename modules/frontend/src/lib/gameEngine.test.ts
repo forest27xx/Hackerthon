@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyComboBonuses,
   applyEventChoice,
   computeActiveCombos,
   computeOrderTotals,
   generateFoodPersona,
   generateResultSummary,
+  getDefaultChoices,
   pickDeliveryEvents
 } from "./gameEngine";
 import { foodPersonaTypes, personaAvatarPositions } from "../data/foodPersonas";
 import { itemPersonaProfiles, missingItemPersonaProfileIds } from "../data/itemPersonaProfiles";
-import { menuItems } from "../data/catalog";
-import type { CartEntry, ComboRule, DeliveryEvent, MenuItem, Mood } from "../types";
+import { comboRules as catalogComboRules, menuItems, moods } from "../data/catalog";
+import type { CartEntry, ComboRule, DeliveryEvent, MenuItem, Mood, ResultJourneyEvent } from "../types";
 
 const baseStats = {
   joy: 0,
@@ -113,6 +115,66 @@ const events: DeliveryEvent[] = [
     ]
   }
 ];
+
+const findMenuItem = (predicate: (item: MenuItem) => boolean, label: string) => {
+  const item = menuItems.find(predicate);
+  if (!item) throw new Error(`Missing catalog item for ${label}`);
+  return item;
+};
+
+const selectCatalogChoices = (item: MenuItem, wantedTags: string[] = []) => {
+  const selectedChoices = getDefaultChoices(item);
+
+  item.options?.forEach((group) => {
+    const matchingChoices = group.choices.filter((choice) => choice.tags?.some((tag) => wantedTags.includes(tag)));
+    if (matchingChoices.length === 0) return;
+
+    selectedChoices[group.id] =
+      group.type === "single"
+        ? [matchingChoices[0].id]
+        : Array.from(new Set([...(selectedChoices[group.id] ?? []), ...matchingChoices.map((choice) => choice.id)]));
+  });
+
+  return selectedChoices;
+};
+
+const catalogEntry = (item: MenuItem, quantity = 1, wantedTags: string[] = []): CartEntry => ({
+  item,
+  quantity,
+  selectedChoices: selectCatalogChoices(item, wantedTags)
+});
+
+const catalogPersona = ({
+  mood,
+  entries,
+  selectedEvents,
+  dealDiscount = 0,
+  deliveryScore,
+  finalScores
+}: {
+  mood: Mood;
+  entries: CartEntry[];
+  selectedEvents: ResultJourneyEvent[];
+  dealDiscount?: number;
+  deliveryScore: Parameters<typeof generateFoodPersona>[0]["deliveryScore"];
+  finalScores: Parameters<typeof generateFoodPersona>[0]["finalScores"];
+}) => {
+  const totals = computeOrderTotals(entries);
+  const combos = computeActiveCombos(entries, catalogComboRules, mood);
+  const statsWithCombo = applyComboBonuses(totals.stats, combos);
+
+  return generateFoodPersona({
+    mood,
+    entries,
+    combos,
+    deliveryScore,
+    selectedEvents,
+    finalScores,
+    statsWithCombo,
+    dealDiscount,
+    rawPrice: totals.price
+  });
+};
 
 describe("gameEngine", () => {
   it("computes price and stat totals with quantities and selected options", () => {
@@ -255,6 +317,209 @@ describe("gameEngine", () => {
 
     expect(persona.code).toMatch(/^[HN][CE][GR][SL]$/);
     expect(persona.axes).toHaveLength(4);
+  });
+
+  it("keeps high-contrast food persona paths distinct", () => {
+    const coffee = findMenuItem((item) => item.category === "coffee" && item.tags.includes("caffeine"), "caffeine coffee");
+    const lightFood = findMenuItem((item) => item.category === "lightFood" && item.tags.includes("protein"), "protein light food");
+    const cheapComboSide = findMenuItem((item) => item.price <= 4 && item.tags.includes("combo"), "cheap combo side");
+    const spicyMain = findMenuItem(
+      (item) => ["nightFood", "stirFry", "soupPot"].includes(item.category) && item.tags.includes("spicy"),
+      "spicy main"
+    );
+    const friedPartyItem = findMenuItem((item) => item.tags.includes("fried") || item.tags.includes("party") || item.tags.includes("fun"), "party item");
+    const sweetDessert = findMenuItem((item) => item.category === "dessert" && (item.tags.includes("sweet") || item.tags.includes("share")), "dessert");
+    const healthyFruit = findMenuItem((item) => item.tags.includes("fruit") && item.tags.includes("healthy"), "healthy fruit");
+
+    const checklistDealControl = catalogPersona({
+      mood: "overtime",
+      entries: [
+        catalogEntry(coffee, 1, ["lowSugar", "healthy", "light", "safe", "separatePack"]),
+        catalogEntry(lightFood, 1, ["lowSugar", "protein", "healthy", "light"]),
+        catalogEntry(cheapComboSide)
+      ],
+      dealDiscount: 10,
+      deliveryScore: { speed: 48, safety: 74, health: 74, integrity: 76, trust: 68 },
+      finalScores: { joyIndex: 72, healthIndex: 82, safetyIndex: 88 },
+      selectedEvents: [
+        {
+          eventTitle: "冷热分袋确认",
+          choiceLabel: "冷热分袋，慢一点也行",
+          eventType: "packaging",
+          personaEffect: { control: 8, restraint: 2 },
+          badges: ["包装完整主义者"]
+        },
+        {
+          eventTitle: "优惠券诱惑",
+          choiceLabel: "加购触发快乐",
+          eventType: "fun",
+          personaEffect: { deal: 8, structure: 2 },
+          badges: ["满减策略家"]
+        }
+      ]
+    });
+    const freeLoadedHappy = catalogPersona({
+      mood: "celebration",
+      entries: [
+        catalogEntry(spicyMain, 1, ["spicy", "fullness"]),
+        catalogEntry(friedPartyItem, 1, ["fullness", "sweet", "cheese"]),
+        catalogEntry(sweetDessert, 1, ["share", "sweet"])
+      ],
+      deliveryScore: { speed: 60, safety: 45, health: 42, integrity: 45, trust: 50 },
+      finalScores: { joyIndex: 92, healthIndex: 45, safetyIndex: 55 },
+      selectedEvents: [
+        {
+          eventTitle: "健康和加料冲突",
+          choiceLabel: "正常糖 + 双份芋泥",
+          eventType: "fun",
+          personaEffect: { restraint: -8, control: -2 },
+          badges: ["快乐释放派"]
+        },
+        {
+          eventTitle: "路线颠簸",
+          choiceLabel: "相信命运",
+          eventType: "packaging",
+          personaEffect: { control: -6, restraint: -2 },
+          badges: ["随缘接受"]
+        }
+      ]
+    });
+    const recipeSelfControl = catalogPersona({
+      mood: "afterWorkout",
+      entries: [
+        catalogEntry(lightFood, 1, ["protein", "lowSugar", "healthy", "light"]),
+        catalogEntry(healthyFruit, 1, ["lowSugar", "healthy", "light", "safe"])
+      ],
+      deliveryScore: { speed: 50, safety: 72, health: 82, integrity: 72, trust: 64 },
+      finalScores: { joyIndex: 70, healthIndex: 90, safetyIndex: 82 },
+      selectedEvents: [
+        {
+          eventTitle: "健身后补给",
+          choiceLabel: "加蛋白轻食",
+          eventType: "healthyLife",
+          personaEffect: { restraint: 9, control: 2 },
+          badges: ["低糖谈判家"]
+        },
+        {
+          eventTitle: "订单复盘",
+          choiceLabel: "记录下次还这么点",
+          eventType: "fun",
+          personaEffect: { control: 5, deal: -8 },
+          badges: ["稳定复购派"]
+        }
+      ]
+    });
+    const wildHeavySingle = catalogPersona({
+      mood: "hungry",
+      entries: [catalogEntry(spicyMain, 1, ["spicy", "fullness"])],
+      deliveryScore: { speed: 62, safety: 42, health: 38, integrity: 44, trust: 45 },
+      finalScores: { joyIndex: 88, healthIndex: 42, safetyIndex: 52 },
+      selectedEvents: [
+        {
+          eventTitle: "先吃还是先核对",
+          choiceLabel: "直接打开，先吃一口",
+          eventType: "fun",
+          personaEffect: { restraint: -6, control: -6 },
+          badges: ["快乐释放派"]
+        },
+        {
+          eventTitle: "优惠券诱惑",
+          choiceLabel: "不为券凑单",
+          eventType: "fun",
+          personaEffect: { deal: -10 },
+          badges: ["随心预算"]
+        }
+      ]
+    });
+
+    expect(checklistDealControl.code).toBe("HCGS");
+    expect(freeLoadedHappy.code).toBe("HERL");
+    expect(recipeSelfControl.code).toBe("NCGL");
+    expect(wildHeavySingle.code).toBe("NERL");
+  });
+
+  it("keeps sampled persona results from collapsing into only a few common types", () => {
+    let seed = 53535;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const pick = <T,>(items: T[]) => items[Math.floor(random() * items.length)];
+    const randomChoices = (item: MenuItem) => {
+      const selectedChoices = getDefaultChoices(item);
+      item.options?.forEach((group) => {
+        selectedChoices[group.id] =
+          group.type === "single"
+            ? [pick(group.choices).id]
+            : group.choices.filter(() => random() < 0.28).map((choice) => choice.id);
+      });
+      return selectedChoices;
+    };
+    const eventPool: ResultJourneyEvent[] = [
+      { eventTitle: "细致包装", choiceLabel: "分袋核对后再出发", eventType: "packaging", personaEffect: { control: 9, restraint: 2, deal: 1 } },
+      { eventTitle: "随缘放行", choiceLabel: "直接接受，快点就行", eventType: "fun", personaEffect: { control: -9, restraint: -3, deal: -2 } },
+      { eventTitle: "健康补救", choiceLabel: "无糖饮加饭后散步", eventType: "healthyLife", personaEffect: { restraint: 10, control: 2, deal: -2 } },
+      { eventTitle: "优惠券诱惑", choiceLabel: "加购触发满减券", eventType: "fun", personaEffect: { deal: 12, structure: 2, restraint: -2 } },
+      { eventTitle: "不为券凑单", choiceLabel: "不为券凑单", eventType: "fun", personaEffect: { deal: -12, control: -1 } },
+      { eventTitle: "朋友拼单", choiceLabel: "分享给朋友一起吃", eventType: "fun", personaEffect: { structure: 10, control: -1 } },
+      { eventTitle: "单点明确", choiceLabel: "只要这个单点核心", eventType: "fun", personaEffect: { structure: -10, deal: -3 } },
+      { eventTitle: "骑手安全", choiceLabel: "安全第一，不急", eventType: "riderSafety", personaEffect: { control: 8, restraint: 2 } },
+      { eventTitle: "重口直冲", choiceLabel: "重辣直接开吃", eventType: "fun", personaEffect: { restraint: -10, control: -4 } }
+    ];
+    const counts: Partial<Record<string, number>> = {};
+    const sampleCount = 500;
+
+    for (let index = 0; index < sampleCount; index += 1) {
+      const mood = pick(moods).id;
+      const itemCount = 1 + Math.floor(random() * 4);
+      const usedItemIds = new Set<string>();
+      const entries: CartEntry[] = [];
+
+      for (let entryIndex = 0; entryIndex < itemCount; entryIndex += 1) {
+        let item = pick(menuItems);
+        let guard = 0;
+        while (usedItemIds.has(item.id) && guard < 10) {
+          item = pick(menuItems);
+          guard += 1;
+        }
+        usedItemIds.add(item.id);
+        entries.push({ item, quantity: random() < 0.12 ? 2 : 1, selectedChoices: randomChoices(item) });
+      }
+
+      const totals = computeOrderTotals(entries);
+      const combos = computeActiveCombos(entries, catalogComboRules, mood);
+      const statsWithCombo = applyComboBonuses(totals.stats, combos);
+      const selectedEvents = Array.from({ length: 1 + Math.floor(random() * 4) }, () => pick(eventPool));
+      const deliveryScore = {
+        speed: 40 + Math.floor(random() * 45),
+        safety: 40 + Math.floor(random() * 45),
+        health: 40 + Math.floor(random() * 45),
+        integrity: 40 + Math.floor(random() * 45),
+        trust: 40 + Math.floor(random() * 45)
+      };
+      const dealDiscount =
+        random() < 0.45 ? Math.min(16, Math.max(0, Math.round(totals.price * (0.05 + random() * 0.25)))) : 0;
+      const persona = generateFoodPersona({
+        mood,
+        entries,
+        combos,
+        deliveryScore,
+        selectedEvents,
+        finalScores: { joyIndex: 60, healthIndex: 60, safetyIndex: 60 },
+        statsWithCombo,
+        dealDiscount,
+        rawPrice: totals.price
+      });
+
+      counts[persona.code] = (counts[persona.code] ?? 0) + 1;
+    }
+
+    const coveredTypes = Object.keys(counts);
+    const largestBucket = Math.max(...Object.values(counts).map((count) => count ?? 0));
+
+    expect(coveredTypes.length).toBeGreaterThanOrEqual(14);
+    expect(largestBucket / sampleCount).toBeLessThan(0.4);
+    expect(coveredTypes).toEqual(expect.arrayContaining(["NCRS", "NERS", "NERL", "HERL"]));
   });
 
   it("provides complete copy for all 16 food persona codes", () => {

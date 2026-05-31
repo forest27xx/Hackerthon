@@ -4242,6 +4242,41 @@ button {
   font-size: 30px;
 }
 
+.persona-type-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.05;
+}
+
+.persona-type-code,
+.persona-type-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.persona-visual .persona-hero-title {
+  margin-top: 6px;
+}
+
+.persona-visual .persona-type-code {
+  color: #ffe9af;
+  font-size: 30px;
+  font-weight: 1000;
+  letter-spacing: 0.035em;
+}
+
+.persona-visual .persona-type-name {
+  color: #ffe9af;
+  font-size: 23px;
+  font-weight: 1000;
+}
+
 .persona-confidence {
   position: relative;
   z-index: 1;
@@ -6507,18 +6542,24 @@ button {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.persona-index-button span {
+.persona-index-button .persona-index-title {
+  width: 100%;
+}
+
+.persona-index-button .persona-type-code {
   font-size: 11px;
   font-weight: 1000;
   letter-spacing: 0.04em;
 }
 
-.persona-index-button b {
+.persona-index-button .persona-type-name {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  word-break: keep-all;
   font-size: 10px;
+  line-height: 1.1;
 }
 
 .persona-index-sprite {
@@ -6555,15 +6596,26 @@ button {
   font-weight: 1000;
 }
 
-.persona-index-detail strong,
 .persona-index-detail small {
   display: block;
 }
 
-.persona-index-detail strong {
+.persona-index-detail .persona-detail-title {
   margin-top: 3px;
+}
+
+.persona-index-detail .persona-type-code {
   color: #ffe9af;
   font-size: 21px;
+  font-weight: 1000;
+  letter-spacing: 0.035em;
+  line-height: 1.12;
+}
+
+.persona-index-detail .persona-type-name {
+  color: #ffe9af;
+  font-size: 17px;
+  font-weight: 1000;
   line-height: 1.12;
 }
 
