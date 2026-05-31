@@ -13,14 +13,25 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: /开始游戏/ }));
+    expect(screen.getByRole("button", { name: /关闭声音/ })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /加班/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /加班/ }));
-    expect(screen.getByText("人气推荐")).toBeInTheDocument();
+    expect(await screen.findByText("人气推荐")).toBeInTheDocument();
     expect(screen.getAllByText(/今日下单目的/).length).toBeGreaterThan(0);
 
     await user.click(screen.getAllByRole("button", { name: /一键添加/ })[0]);
     expect(screen.getByText(/钱包剩余/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "下单" })).toBeInTheDocument();
+  });
+
+  it("lets a user toggle the global sound switch after audio is initialized", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /开始游戏/ }));
+    await user.click(screen.getByRole("button", { name: /关闭声音/ }));
+
+    expect(screen.getByRole("button", { name: /开启声音/ })).toBeInTheDocument();
   });
 
   it("plays the payment and refresh transition before order progress", async () => {
@@ -30,7 +41,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /开始游戏/ }));
     expect(await screen.findByRole("button", { name: /加班/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /加班/ }));
-    await user.click(screen.getAllByRole("button", { name: /一键添加/ })[0]);
+    await user.click((await screen.findAllByRole("button", { name: /一键添加/ }))[0]);
     await user.click(screen.getByRole("button", { name: "下单" }));
 
     expect(screen.getByText("Face ID 验证中")).toBeInTheDocument();
@@ -46,7 +57,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /开始游戏/ }));
     expect(await screen.findByRole("button", { name: /加班/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /加班/ }));
-    const addPreset = screen.getAllByRole("button", { name: /一键添加/ })[0];
+    const addPreset = (await screen.findAllByRole("button", { name: /一键添加/ }))[0];
     await user.click(addPreset);
     await user.click(addPreset);
     await user.click(addPreset);

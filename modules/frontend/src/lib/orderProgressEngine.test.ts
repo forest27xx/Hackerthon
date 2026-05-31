@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CartEntry, MenuItem } from "../types";
 import {
   buildOrderContext,
+  createInitialOrderProgressScore,
   createOrderProgressGame,
   getEligibleOrderProgressEvents,
   getOrderProgressPhaseCounts,
@@ -112,6 +113,9 @@ const entry = (item: MenuItem, quantity = 1, selectedChoices: CartEntry["selecte
   selectedChoices
 });
 
+const personaAxisKeys = ["structure", "restraint", "control", "deal"];
+const legacyPersonaAxisKeys = ["driver", "scene", "discipline", "novelty"];
+
 describe("orderProgressEngine", () => {
   it("keeps the expanded local event bank at the planned scale", () => {
     const counts = orderProgressEventBank.reduce<Record<string, number>>((acc, event) => {
@@ -159,6 +163,8 @@ describe("orderProgressEngine", () => {
         expect(Object.keys(choice.effect).length).toBeGreaterThan(0);
         expect(choice.personaEffect).toBeTruthy();
         expect(Object.keys(choice.personaEffect ?? {}).length).toBeGreaterThan(0);
+        expect(Object.keys(choice.personaEffect ?? {}).every((key) => personaAxisKeys.includes(key))).toBe(true);
+        expect(Object.keys(choice.personaEffect ?? {}).some((key) => legacyPersonaAxisKeys.includes(key))).toBe(false);
         expect(choice.badges?.length).toBeGreaterThan(0);
       });
     });
@@ -203,6 +209,43 @@ describe("orderProgressEngine", () => {
     expect(mixed.flags.hasMixedTemperature).toBe(true);
     expect(packageEvents.map((event) => event.id)).toContain("m-pack-hotcold");
     expect(riderRoadEvents.map((event) => event.id)).toContain("r-status-tilt");
+  });
+
+  it("derives the initial process state from a 70 baseline and order risk", () => {
+    expect(initialOrderProgressScore).toEqual({ speed: 70, safety: 70, health: 70, integrity: 70, trust: 70 });
+
+    const ordinary = createInitialOrderProgressScore(buildOrderContext([entry(coffee)], "slacking"));
+    const risky = createInitialOrderProgressScore(buildOrderContext([entry(milkTea), entry(hotMeal), entry(friedSnack)], "lateNight"));
+
+    expect(ordinary.integrity).toBeGreaterThan(risky.integrity);
+    expect(ordinary.safety).toBeGreaterThan(risky.safety);
+    expect(risky.health).toBeLessThan(70);
+  });
+
+  it("raises integrity and safety when packaging control is selected", () => {
+    const packableTea: MenuItem = {
+      ...milkTea,
+      options: [
+        ...(milkTea.options ?? []),
+        {
+          id: "package",
+          name: "Package",
+          type: "multi",
+          choices: [
+            { id: "cupHolder", label: "Cup holder", tags: ["safe"], statDelta: { safety: 3 } },
+            { id: "separate", label: "Separate pack", tags: ["separatePack"], statDelta: { safety: 4 } }
+          ]
+        }
+      ]
+    };
+
+    const loose = createInitialOrderProgressScore(buildOrderContext([entry(milkTea), entry(hotMeal)], "overtime"));
+    const packed = createInitialOrderProgressScore(
+      buildOrderContext([entry(packableTea, 1, { package: ["cupHolder", "separate"] }), entry(hotMeal)], "overtime")
+    );
+
+    expect(packed.integrity).toBeGreaterThan(loose.integrity);
+    expect(packed.safety).toBeGreaterThan(loose.safety);
   });
 
   it("selects a stable 4/3/1 event sequence for the same order and seed", () => {

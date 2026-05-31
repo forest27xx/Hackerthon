@@ -40,6 +40,8 @@ import {
   Tags,
   TicketPercent,
   Utensils,
+  Volume2,
+  VolumeX,
   WalletCards,
   Zap,
   type LucideIcon
@@ -61,6 +63,7 @@ import neonOrderOffice from "./assets/cover/neon-order-office.png";
 import chiShangGrid from "./assets/persona/chi-shang-grid.png";
 import { categories, comboRules, menuItems, moods } from "./data/catalog";
 import { diceConfigs } from "./data/escortBoard";
+import { getOrderVoiceCue } from "./data/orderVoiceCues";
 import {
   applyComboBonuses,
   computeActiveCombos,
@@ -84,6 +87,7 @@ import {
   toOrderJourneyEvents
 } from "./lib/orderProgressEngine";
 import { missingLocalImageKeys, resolveMenuImage } from "./lib/menuImages";
+import { useSoundController } from "./lib/useSoundController";
 import type {
   CartEntry,
   Category,
@@ -99,6 +103,7 @@ import type {
   MenuItem,
   Mood,
   OrderProgressGameState,
+  PersonaAxisKey,
   ResultJourneyEvent,
   Stats
 } from "./types";
@@ -117,11 +122,11 @@ const eventTypeLabels: Record<DeliveryEventType, string> = {
 };
 
 const statLabels: Record<keyof Stats, string> = {
-  joy: "快乐值",
-  health: "健康值",
+  joy: "快乐点",
+  health: "负担控制",
   fullness: "饱腹值",
   energy: "清醒值",
-  safety: "安全值"
+  safety: "到手稳妥"
 };
 
 const deliveryLabels: Record<keyof DeliveryScore, string> = {
@@ -276,6 +281,23 @@ const formatEffect = (effect: Partial<DeliveryScore>) => {
     .filter(([, value]) => value !== undefined && value !== 0)
     .map(([key, value]) => `${deliveryLabels[key as keyof DeliveryScore]}${formatSigned(value ?? 0)}`);
   return parts.length > 0 ? parts.join(" · ") : "仪式感 +1";
+};
+
+const personaDebugLabels: Record<PersonaAxisKey, { plus: string; minus: string }> = {
+  structure: { plus: "H拼图", minus: "N单点" },
+  restraint: { plus: "C刹车", minus: "E油门" },
+  control: { plus: "G控场", minus: "R随缘" },
+  deal: { plus: "S薅毛", minus: "L随心" }
+};
+
+const formatPersonaEffect = (effect: Partial<Record<PersonaAxisKey, number>> = {}) => {
+  const parts = (Object.entries(effect) as [PersonaAxisKey, number][])
+    .filter(([, value]) => value !== undefined && Math.abs(value) > 0)
+    .map(([key, value]) => {
+      const label = value >= 0 ? personaDebugLabels[key].plus : personaDebugLabels[key].minus;
+      return `${label}${formatSigned(Math.round(value))}`;
+    });
+  return parts.length > 0 ? parts.join(" · ") : "无明显轴变化";
 };
 
 const toJourneyEvents = (state: EscortGameState): ResultJourneyEvent[] =>
@@ -497,8 +519,13 @@ const getMealPresetItems = (preset: MealPreset) =>
 const getPresetPrice = (items: MenuItem[]) => items.reduce((sum, item) => sum + item.price, 0);
 
 const ORDER_CHOICE_ANIMATION_MS = 360;
+const MOOD_SELECT_FEEDBACK_MS = 140;
 
 function App() {
+  const showPersonaDebug = useMemo(
+    () => new URLSearchParams(window.location.search).get("debugPersona") === "1",
+    []
+  );
   const [stage, setStage] = useState<Stage>("cover");
   const [mood, setMood] = useState<Mood>(moodDefault);
   const [activeCategory, setActiveCategory] = useState<Category>("milkTea");
@@ -525,14 +552,17 @@ function App() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [paymentMessage, setPaymentMessage] = useState("");
   const [isCoverEntering, setIsCoverEntering] = useState(false);
+  const [selectedMoodFeedback, setSelectedMoodFeedback] = useState<Mood | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
   const movementTimersRef = useRef<number[]>([]);
   const orderChoiceTimerRef = useRef<number | null>(null);
   const paymentTimersRef = useRef<number[]>([]);
   const coverTimerRef = useRef<number | null>(null);
+  const moodChoiceTimerRef = useRef<number | null>(null);
   const orderScrollTopRef = useRef(0);
   const touchStartYRef = useRef(0);
   const touchStartedInCartDrawerRef = useRef(false);
+  const { audioReady, soundEnabled, unlockAudio, toggleSound, playSfx, playOrderVoice, replayCurrentVoice } = useSoundController();
 
   const visibleItems = useMemo(() => menuItems.filter((item) => item.category === activeCategory), [activeCategory]);
   const totals = useMemo(() => computeOrderTotals(cart), [cart]);
@@ -572,14 +602,17 @@ function App() {
         selectedEventTitles: selectedEvents.map((event) => event.eventTitle),
         selectedEvents,
         entries: cart,
-        escortOutcome: orderProgressState?.outcome
+        escortOutcome: orderProgressState?.outcome,
+        rawPrice: totals.price,
+        dealDiscount: couponDiscount
       }),
-    [cart, combos, deliveryScore, orderProgressState?.outcome, mood, payablePrice, selectedEvents, totals.stats]
+    [cart, combos, couponDiscount, deliveryScore, orderProgressState?.outcome, mood, payablePrice, selectedEvents, totals.price, totals.stats]
   );
 
   const missingImages = useMemo(() => missingLocalImageKeys(menuItems).length, []);
   const cartCount = cart.reduce((sum, entry) => sum + entry.quantity, 0);
   const currentOrderEvent = orderProgressState?.currentEvent;
+  const currentOrderVoiceCue = useMemo(() => (currentOrderEvent ? getOrderVoiceCue(currentOrderEvent) : null), [currentOrderEvent]);
   const currentOrderNode = orderProgressState ? orderProgressState.nodes[orderProgressState.currentIndex] : undefined;
   const orderProgressStep = orderProgressState
     ? Math.min(orderProgressState.resolvedEvents.length + (orderProgressState.completed ? 0 : 1), orderProgressState.nodes.length)
@@ -597,11 +630,11 @@ function App() {
     currentOrderNode?.phase === "merchant" ? "商家来信" : currentOrderNode?.phase === "rider" ? "骑手来信" : "收餐确认";
   const orderMeters = orderProgressState
     ? [
-        { key: "expect", label: "期待值", value: orderProgressState.score.speed, sub: "快乐推进", icon: Sparkles, tone: "red" },
-        { key: "safe", label: "安心值", value: orderProgressState.score.safety, sub: "沟通稳定", icon: ShieldCheck, tone: "blue" },
-        { key: "complete", label: "完整值", value: orderProgressState.score.integrity, sub: "少错少漏", icon: PackageCheck, tone: "orange" },
-        { key: "balance", label: "平衡值", value: orderProgressState.score.health, sub: "负担可控", icon: HeartPulse, tone: "green" },
-        { key: "kind", label: "体贴值", value: orderProgressState.score.trust, sub: "双方舒服", icon: Sparkles, tone: "gold" }
+        { key: "expect", label: "期待值", value: orderProgressState.score.speed, sub: "到手期待", icon: Sparkles, tone: "red" },
+        { key: "safe", label: "安心值", value: orderProgressState.score.safety, sub: "安全沟通", icon: ShieldCheck, tone: "blue" },
+        { key: "complete", label: "完整值", value: orderProgressState.score.integrity, sub: "包装口感", icon: PackageCheck, tone: "orange" },
+        { key: "balance", label: "平衡值", value: orderProgressState.score.health, sub: "负担修正", icon: HeartPulse, tone: "green" },
+        { key: "kind", label: "体贴值", value: orderProgressState.score.trust, sub: "沟通温度", icon: Sparkles, tone: "gold" }
       ]
     : [];
   const currentEscortEvent = escortState?.currentEvent;
@@ -651,9 +684,9 @@ function App() {
     : [];
   const activeMood = moods.find((option) => option.id === mood) ?? moods[0];
   const previewMeters = [
-    { key: "joy", label: "快乐值", value: clampMeter(50 + statsWithCombo.joy), icon: Sparkles, tone: "green" },
-    { key: "health", label: "健康值", value: clampMeter(55 + statsWithCombo.health), icon: HeartPulse, tone: "red" },
-    { key: "safety", label: "安全值", value: clampMeter(58 + statsWithCombo.safety), icon: ShieldCheck, tone: "blue" }
+    { key: "joy", label: "快乐浓度", value: clampMeter(50 + statsWithCombo.joy), icon: Sparkles, tone: "green" },
+    { key: "health", label: "负担控制", value: clampMeter(55 + statsWithCombo.health), icon: HeartPulse, tone: "red" },
+    { key: "safety", label: "到手稳妥", value: clampMeter(58 + statsWithCombo.safety), icon: ShieldCheck, tone: "blue" }
   ];
   const recommendedPresets = useMemo(
     () =>
@@ -705,6 +738,8 @@ function App() {
 
   const handleCoverStart = () => {
     if (isCoverEntering) return;
+    unlockAudio();
+    playSfx("tap");
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     setIsCoverEntering(true);
     if (coverTimerRef.current !== null) window.clearTimeout(coverTimerRef.current);
@@ -725,12 +760,18 @@ function App() {
     setIsResolvingChoice(false);
   }, [currentOrderEvent?.id]);
 
+  useEffect(() => {
+    if (stage !== "delivery" || isResolvingChoice || !currentOrderVoiceCue) return;
+    playOrderVoice(currentOrderVoiceCue);
+  }, [currentOrderVoiceCue, isResolvingChoice, playOrderVoice, stage]);
+
   useEffect(
     () => () => {
       clearMovementTimers();
       clearPaymentTimers();
       if (orderChoiceTimerRef.current !== null) window.clearTimeout(orderChoiceTimerRef.current);
       if (coverTimerRef.current !== null) window.clearTimeout(coverTimerRef.current);
+      if (moodChoiceTimerRef.current !== null) window.clearTimeout(moodChoiceTimerRef.current);
     },
     []
   );
@@ -794,11 +835,24 @@ function App() {
   }, [displayedEscortIndex, escortState, isRiderMoving, orderPhaseCounts, orderProgressState, stage]);
 
   const chooseMood = (nextMood: Mood) => {
+    unlockAudio();
+    playSfx("tap");
     clearPaymentTimers();
     setPaymentStatus("idle");
     setPaymentMessage("");
-    setMood(nextMood);
-    setStage("order");
+    setSelectedMoodFeedback(nextMood);
+
+    if (moodChoiceTimerRef.current !== null) window.clearTimeout(moodChoiceTimerRef.current);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    moodChoiceTimerRef.current = window.setTimeout(
+      () => {
+        setMood(nextMood);
+        setSelectedMoodFeedback(null);
+        setStage("order");
+        moodChoiceTimerRef.current = null;
+      },
+      reduceMotion ? 0 : MOOD_SELECT_FEEDBACK_MS
+    );
   };
 
   const closeDrawers = () => {
@@ -877,6 +931,7 @@ function App() {
   };
 
   const beginOrderProgress = () => {
+    playSfx("success");
     closeDrawers();
     const game = createOrderProgressGame({ entries: cart, mood, seed: createSeed(mood, cart) });
     setOrderProgressState(game);
@@ -899,9 +954,11 @@ function App() {
   const handleCheckoutClick = () => {
     if (cart.length === 0 || paymentStatus === "scanning" || paymentStatus === "success" || paymentStatus === "refreshing") return;
 
+    unlockAudio();
     clearPaymentTimers();
 
     if (!walletCanPay) {
+      playSfx("tap");
       setPaymentStatus("insufficient");
       setPaymentMessage(`钱包差 ¥${Math.abs(walletRemaining)}，删减一点或试试神券膨胀。`);
       setIsCartOpen(true);
@@ -915,6 +972,7 @@ function App() {
       return;
     }
 
+    playSfx("checkout");
     closeDrawers();
     setPaymentStatus("scanning");
     setPaymentMessage(`本单实付 ¥${payablePrice}，正在核对小票。`);
@@ -925,6 +983,7 @@ function App() {
 
     paymentTimersRef.current.push(
       window.setTimeout(() => {
+        playSfx("success");
         setPaymentStatus("success");
         setPaymentMessage("快乐小票已扣款，马上进入订单进行中。");
       }, successDelay)
@@ -944,11 +1003,15 @@ function App() {
     setOrderProgressState(next);
     setDeliveryScore(next.score);
     setSelectedEvents(toOrderJourneyEvents(next));
-    if (next.completed) setStage("result");
+    if (next.completed) {
+      playSfx("result");
+      setStage("result");
+    }
   };
 
   const resolveOrderChoice = (choiceId: string) => {
     if (!orderProgressState?.currentEvent || isResolvingChoice) return;
+    playSfx("select");
     const choice = orderProgressState.currentEvent.choices.find((item) => item.id === choiceId);
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     if (!choice || reduceMotion) {
@@ -1168,13 +1231,29 @@ function App() {
               <h1>快乐下单事务所</h1>
               <p>{stage === "delivery" ? "订单进行中" : stage === "result" ? "快乐订单已生成" : "选择今日下单目的"}</p>
             </div>
-            <div className="header-score" aria-label={`快乐值 ${Math.max(0, statsWithCombo.joy)}`}>
+            <div className="header-score" aria-label={`快乐点 ${Math.max(0, statsWithCombo.joy)}`}>
               <Sparkles size={15} />
-              <span>快乐值</span>
+              <span>快乐点</span>
               <strong>{Math.max(0, statsWithCombo.joy)}</strong>
             </div>
           </header>
         )}
+
+        <button
+          className={`sound-toggle ${soundEnabled ? "is-on" : "is-off"} ${audioReady ? "is-ready" : ""}`}
+          type="button"
+          onClick={() => {
+            unlockAudio();
+            playSfx("tap");
+            toggleSound();
+          }}
+          aria-label={soundEnabled ? "关闭声音" : "开启声音"}
+          aria-pressed={soundEnabled}
+          title={soundEnabled ? "关闭声音" : "开启声音"}
+        >
+          {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+          <span>{soundEnabled ? "声音开" : "声音关"}</span>
+        </button>
 
         {stage === "cover" && (
           <section
@@ -1224,7 +1303,7 @@ function App() {
                 return (
                   <button
                     key={option.id}
-                    className="mood-card cover-purpose-card"
+                    className={`mood-card cover-purpose-card ${selectedMoodFeedback === option.id ? "is-selected" : ""}`}
                     type="button"
                     style={
                       {
@@ -1578,6 +1657,7 @@ function App() {
                 );
               })}
             </div>
+            <p className="order-meter-note">过程状态基准 70，订单结构会先修正；你的选择会让体验上下波动，并成为吃商证据。</p>
 
             <div className="order-scene-scroll">
               {currentOrderEvent && currentOrderNode && (
@@ -1612,12 +1692,26 @@ function App() {
                         <HelpCircle size={16} />
                         <span>{currentOrderEvent.insight}</span>
                       </div>
+                      {currentOrderVoiceCue && (
+                        <button
+                          className="voice-replay-button"
+                          type="button"
+                          onClick={() => {
+                            unlockAudio();
+                            playSfx("tap");
+                            replayCurrentVoice(currentOrderVoiceCue);
+                          }}
+                          aria-label="重播当前语音"
+                        >
+                          <Volume2 size={15} />
+                          <span>重播语音</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="order-choice-list">
                       {currentOrderEvent.choices.map((choice) => {
                         const isSelected = selectedOrderChoiceId === choice.id;
-                        const effectText = formatEffect(choice.effect);
                         return (
                           <button
                             type="button"
@@ -1629,8 +1723,8 @@ function App() {
                           >
                             <span>{choice.label}</span>
                             <small>{choice.detail}</small>
-                            <em>{effectText}</em>
-                            {isSelected && pendingChoiceEffect && <b className="choice-effect-float">{formatEffect(pendingChoiceEffect)}</b>}
+                            {showPersonaDebug && <em className="persona-debug-chip">{formatPersonaEffect(choice.personaEffect)}</em>}
+                            {isSelected && pendingChoiceEffect && <b className="choice-effect-float">已记录为吃商证据</b>}
                           </button>
                         );
                       })}
@@ -1874,7 +1968,9 @@ function App() {
                       >
                         <span>{choice.label}</span>
                         {choice.detail && <small>{choice.detail}</small>}
-                        <em>{currentEscortEvent.mode === "quiz" && choice.correct ? "正确答案 · " : ""}{formatEffect(choice.effect)}</em>
+                        {showPersonaDebug && (
+                          <em>{currentEscortEvent.mode === "quiz" && choice.correct ? "正确答案 · " : ""}{formatEffect(choice.effect)}</em>
+                        )}
                       </button>
                     );
                   })}
@@ -1958,7 +2054,7 @@ function App() {
                 <div className="score-trio">
                   {summary.receipt.indexes.map((item) => (
                     <div key={item.label}>
-                      {item.label === "快乐值" ? <Sparkles size={18} /> : item.label === "健康值" ? <HeartPulse size={18} /> : <ShieldCheck size={18} />}
+                      {item.label.includes("快乐") ? <Sparkles size={18} /> : item.label.includes("负担") ? <HeartPulse size={18} /> : <ShieldCheck size={18} />}
                       <strong>{item.value}</strong>
                       <span>{item.label}</span>
                     </div>
@@ -1981,7 +2077,7 @@ function App() {
               </div>
 
               <section
-                className="persona-card"
+                className={`persona-card rarity-${summary.foodPersona.rarity.key}`}
                 aria-label="美食人格 MBTI"
                 style={{ "--persona-grid-image": `url(${chiShangGrid})` } as CSSProperties}
               >
@@ -2005,10 +2101,16 @@ function App() {
                   </div>
                 </div>
                 <div className="persona-confidence">
-                  <span>{summary.foodPersona.confidenceLabel}</span>
+                  <span>
+                    {summary.foodPersona.rarity.level === "Hidden" ? "Hidden" : `Lv.${summary.foodPersona.rarity.level}`} · {summary.foodPersona.rarity.label}
+                  </span>
                   <b>{summary.foodPersona.dominantAxis.leaningLabel}</b>
                 </div>
+                <div className="persona-level-note">{summary.foodPersona.rarity.reason}</div>
                 <p>{summary.foodPersona.description}</p>
+                <div className="persona-logic-note">
+                  点单内容决定吃商底色；订单进行中的选择决定过程修正和变体称号。过程指数只辅助强化 C/E、G/R 等轴，不会单独决定人格。
+                </div>
                 <div className="persona-evidence-list">
                   {summary.personaExplanation.evidenceLines.map((line) => (
                     <div key={`${line.type}-${line.label}`}>

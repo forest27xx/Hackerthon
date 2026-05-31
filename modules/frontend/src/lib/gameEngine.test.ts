@@ -8,6 +8,8 @@ import {
   pickDeliveryEvents
 } from "./gameEngine";
 import { foodPersonaTypes, personaAvatarPositions } from "../data/foodPersonas";
+import { itemPersonaProfiles, missingItemPersonaProfileIds } from "../data/itemPersonaProfiles";
+import { menuItems } from "../data/catalog";
 import type { CartEntry, ComboRule, DeliveryEvent, MenuItem, Mood } from "../types";
 
 const baseStats = {
@@ -192,21 +194,32 @@ describe("gameEngine", () => {
 
     expect(summary.orderTitle).toBe("工作日精神急救订单");
     expect(summary.persona).toContain("加班续命包");
-    expect(summary.shareText).toContain("快乐指数");
+    expect(summary.shareText).toContain("快乐浓度");
     expect(summary.receiptLines).toContain("订单沟通：封口机临时故障 / 饭后久坐预警");
+    expect(summary.receiptLines.join(" / ")).toContain("最终预测");
     expect(summary.foodPersona.code).toHaveLength(4);
     expect(summary.journeyLines.join(" / ")).toContain("今日下单目的");
     expect(summary.receipt.amount).toBe(34);
     expect(summary.receipt.items).toEqual(["厚芋泥波波x1", "盐酥鸡x1"]);
     expect(summary.receipt.choices).toEqual(["等重新封口", "下楼散步取餐"]);
     expect(summary.personaExplanation.evidenceLines.map((line) => line.type)).toEqual(
-      expect.arrayContaining(["order", "decision", "result"])
+      expect.arrayContaining(["structure", "restraint", "control", "deal", "result"])
     );
-    expect(summary.foodPersona.evidenceLines).toHaveLength(3);
+    expect(summary.personaExplanation.evidenceLines.map((line) => line.label)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("商品证据"),
+        expect.stringContaining("规格证据"),
+        expect.stringContaining("过程证据"),
+        expect.stringContaining("优惠证据")
+      ])
+    );
+    expect(summary.personaExplanation.evidenceLines.map((line) => line.text).join(" ")).not.toContain("分数决定");
+    expect(summary.foodPersona.evidenceLines.length).toBeGreaterThanOrEqual(5);
     expect(summary.foodPersona.variantReason).toContain(summary.foodPersona.variantTitle);
     expect(summary.foodPersona.avatarKey).toBeTruthy();
     expect(summary.foodPersona.avatarPosition).toEqual(personaAvatarPositions[summary.foodPersona.code]);
     expect(summary.foodPersona.confidenceLabel).toMatch(/证据|样本/);
+    expect(summary.foodPersona.rarity.colorLabel).not.toBe("红色");
   });
 
   it("generates a stable food persona from the same purpose, cart, and choices", () => {
@@ -240,28 +253,28 @@ describe("gameEngine", () => {
       statsWithCombo: { joy: 48, health: -16, fullness: 32, energy: 6, safety: 4 }
     });
 
-    expect(persona.code).toMatch(/^[ER][SI][FB][NC]$/);
+    expect(persona.code).toMatch(/^[HN][CE][GR][SL]$/);
     expect(persona.axes).toHaveLength(4);
   });
 
   it("provides complete copy for all 16 food persona codes", () => {
     expect(Object.keys(foodPersonaTypes).sort()).toEqual([
-      "EIBC",
-      "EIBN",
-      "EIFC",
-      "EIFN",
-      "ESBC",
-      "ESBN",
-      "ESFC",
-      "ESFN",
-      "RIBC",
-      "RIBN",
-      "RIFC",
-      "RIFN",
-      "RSBC",
-      "RSBN",
-      "RSFC",
-      "RSFN"
+      "HCGL",
+      "HCGS",
+      "HCRL",
+      "HCRS",
+      "HEGL",
+      "HEGS",
+      "HERL",
+      "HERS",
+      "NCGL",
+      "NCGS",
+      "NCRL",
+      "NCRS",
+      "NEGL",
+      "NEGS",
+      "NERL",
+      "NERS"
     ]);
 
     Object.values(foodPersonaTypes).forEach((persona) => {
@@ -294,7 +307,7 @@ describe("gameEngine", () => {
       statsWithCombo: { joy: 18, health: 10, fullness: 6, energy: 4, safety: 8 }
     });
 
-    expect(persona.badges).toEqual(expect.arrayContaining(["健康顾问", "安心守护者", "守护骑手"]));
+    expect(persona.badges).toEqual(expect.arrayContaining(["低糖谈判家", "安心控场", "骑手友好派"]));
   });
 
   it("explains persona variants from different decision evidence", () => {
@@ -318,7 +331,7 @@ describe("gameEngine", () => {
           choiceLabel: "冷热分袋，慢一点也行",
           eventType: "packaging" as const,
           badges: ["包装完整主义者"],
-          personaEffect: { driver: -5, discipline: -4, novelty: -4 }
+          personaEffect: { control: 8, restraint: 2 }
         }
       ]
     });
@@ -330,7 +343,7 @@ describe("gameEngine", () => {
           choiceLabel: "安全第一不催单",
           eventType: "riderSafety" as const,
           badges: ["骑手友好派"],
-          personaEffect: { scene: 5, driver: -4, discipline: -3 }
+          personaEffect: { control: 6, restraint: 2 }
         }
       ]
     });
@@ -338,5 +351,14 @@ describe("gameEngine", () => {
     expect(careful.variantTitle).not.toBe(friendly.variantTitle);
     expect(careful.variantReason).toContain("冷热分袋");
     expect(friendly.variantReason).toContain("安全第一");
+  });
+
+  it("builds an item persona profile for every menu item", () => {
+    expect(missingItemPersonaProfileIds).toEqual([]);
+    expect(Object.keys(itemPersonaProfiles)).toHaveLength(menuItems.length);
+    menuItems.forEach((item) => {
+      expect(itemPersonaProfiles[item.id].reason).toContain(item.name);
+      expect(itemPersonaProfiles[item.id].evidenceTags.length).toBeGreaterThan(0);
+    });
   });
 });

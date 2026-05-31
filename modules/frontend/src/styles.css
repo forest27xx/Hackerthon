@@ -148,6 +148,57 @@ button {
   line-height: 1;
 }
 
+.sound-toggle {
+  position: absolute;
+  top: 76px;
+  right: 12px;
+  z-index: 48;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid rgba(21, 19, 15, 0.1);
+  border-radius: 8px;
+  color: #1b1711;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 24px rgba(21, 19, 15, 0.12);
+  backdrop-filter: blur(12px) saturate(1.15);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.sound-toggle.is-ready.is-on {
+  border-color: rgba(10, 167, 109, 0.26);
+  color: #075f44;
+}
+
+.sound-toggle.is-off {
+  color: #766d62;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.sound-toggle:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.phone-frame.is-start-cover .sound-toggle {
+  top: 38px;
+  right: 34px;
+  color: #fff7d7;
+  border-color: rgba(255, 224, 154, 0.36);
+  background: rgba(0, 0, 0, 0.24);
+  box-shadow: 0 0 24px rgba(255, 205, 118, 0.16);
+}
+
+.phone-frame.is-cover .sound-toggle {
+  color: #fff7d7;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(5, 12, 16, 0.34);
+}
+
 .phone-frame.is-cover {
   background: #071318;
 }
@@ -696,6 +747,15 @@ button {
   transform: translateY(0) scale(0.985);
 }
 
+.cover-purpose-card.is-selected {
+  border-color: rgba(255, 248, 216, 0.84);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.28),
+    0 0 0 2px rgba(255, 248, 216, 0.24) inset,
+    0 0 42px var(--purpose-glow);
+  animation: moodSelectPress 180ms cubic-bezier(0.2, 0.9, 0.2, 1.16) both;
+}
+
 .cover-purpose-card:hover::after,
 .cover-purpose-card:focus-visible::after {
   transform: rotate(18deg) translateX(95%);
@@ -750,6 +810,16 @@ button {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes moodSelectPress {
+  0% {
+    transform: translateY(0) scale(0.985);
+  }
+
+  100% {
+    transform: translateY(-2px) scale(1.018);
   }
 }
 
@@ -3596,6 +3666,63 @@ button {
   background: rgba(0, 0, 0, 0.26);
 }
 
+.persona-card.rarity-green {
+  border-color: rgba(103, 232, 162, 0.38);
+}
+
+.persona-card.rarity-blue {
+  border-color: rgba(125, 211, 252, 0.42);
+}
+
+.persona-card.rarity-purple {
+  border-color: rgba(216, 180, 254, 0.48);
+}
+
+.persona-card.rarity-gold {
+  border-color: rgba(245, 196, 81, 0.92);
+  box-shadow: 0 22px 46px rgba(166, 113, 29, 0.22);
+}
+
+.persona-card.rarity-hidden {
+  background:
+    radial-gradient(circle at 10% 8%, rgba(245, 196, 81, 0.28), transparent 30%),
+    radial-gradient(circle at 86% 16%, rgba(125, 211, 252, 0.14), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent 28%),
+    linear-gradient(135deg, #080705, #17130d);
+  border-color: rgba(245, 196, 81, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 24px 52px rgba(0, 0, 0, 0.36);
+}
+
+.persona-level-note {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: rgba(255, 241, 202, 0.82);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(219, 166, 66, 0.22);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.persona-logic-note {
+  position: relative;
+  z-index: 1;
+  margin-top: 10px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  color: rgba(255, 241, 202, 0.9);
+  background:
+    linear-gradient(135deg, rgba(245, 196, 81, 0.14), rgba(255, 255, 255, 0.05)),
+    rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(245, 196, 81, 0.32);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .persona-card > p,
 .persona-evidence-list,
 .variant-reason,
@@ -4155,6 +4282,19 @@ button {
   animation-delay: 96ms;
 }
 
+.order-meter-note {
+  margin: -3px 2px 2px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: rgba(68, 48, 24, 0.86);
+  background: rgba(255, 247, 229, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(10px);
+  font-size: 10px;
+  line-height: 1.35;
+  box-shadow: 0 6px 14px rgba(31, 25, 16, 0.06);
+}
+
 .order-meter svg,
 .order-meter span,
 .order-meter strong,
@@ -4621,6 +4761,29 @@ button {
   margin-top: 1px;
 }
 
+.voice-replay-button {
+  justify-self: start;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  color: #4d3211;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.44), rgba(255, 244, 224, 0.18)),
+    rgba(255, 255, 255, 0.14);
+  box-shadow: 0 7px 16px rgba(21, 19, 15, 0.08);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.voice-replay-button:active {
+  transform: translateY(1px) scale(0.98);
+}
+
 .order-choice-list {
   position: relative;
   z-index: 1;
@@ -4750,6 +4913,15 @@ button {
   font-size: 10px;
   font-weight: 900;
   line-height: 1.2;
+}
+
+.order-choice-list .persona-debug-chip {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #123d2d;
+  background: rgba(225, 255, 239, 0.72);
+  border: 1px solid rgba(10, 167, 109, 0.2);
 }
 
 .choice-effect-float {

@@ -269,7 +269,7 @@ export interface EscortGameState {
   outcome?: EscortOutcome;
 }
 
-export type PersonaAxisKey = "driver" | "scene" | "discipline" | "novelty";
+export type PersonaAxisKey = "structure" | "restraint" | "control" | "deal";
 
 export interface PersonaAxisScore {
   key: PersonaAxisKey;
@@ -290,7 +290,7 @@ export interface FoodPersonaType {
   nextOrder: string;
 }
 
-export type PersonaEvidenceType = "order" | "decision" | "result";
+export type PersonaEvidenceType = "structure" | "restraint" | "control" | "deal" | "result";
 
 export interface PersonaEvidenceLine {
   type: PersonaEvidenceType;
@@ -306,6 +306,16 @@ export interface PersonaDominantAxis {
   leaningLabel: string;
 }
 
+export type PersonaRarityKey = "green" | "blue" | "purple" | "gold" | "hidden";
+
+export interface PersonaRarity {
+  level: number | "Hidden";
+  key: PersonaRarityKey;
+  label: string;
+  colorLabel: string;
+  reason: string;
+}
+
 export interface FoodPersonaResult extends FoodPersonaType {
   variantTitle: string;
   displayName: string;
@@ -317,6 +327,7 @@ export interface FoodPersonaResult extends FoodPersonaType {
   avatarKey: string;
   avatarPosition: { x: number; y: number };
   confidenceLabel: string;
+  rarity: PersonaRarity;
 }
 
 export interface ResultJourneyEvent {

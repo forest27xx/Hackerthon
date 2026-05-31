@@ -17,12 +17,22 @@ import type {
 } from "../types";
 
 export const initialOrderProgressScore: DeliveryScore = {
-  speed: 72,
+  speed: 70,
   safety: 70,
-  health: 68,
-  integrity: 76,
+  health: 70,
+  integrity: 70,
   trust: 70
 };
+
+const clampOrderScore = (value: number) => Math.max(35, Math.min(98, Math.round(value)));
+
+const normalizeOrderScore = (score: DeliveryScore): DeliveryScore => ({
+  speed: clampOrderScore(score.speed),
+  safety: clampOrderScore(score.safety),
+  health: clampOrderScore(score.health),
+  integrity: clampOrderScore(score.integrity),
+  trust: clampOrderScore(score.trust)
+});
 
 const destinationByMood: Record<Mood, string> = {
   tired: "家",
@@ -48,7 +58,38 @@ export const orderProgressNodes: OrderProgressNode[] = [
   { id: "arrival-check", phase: "arrival", label: "收餐确认", shortLabel: "收", description: "第一反应会暴露你的吃商人格" }
 ];
 
-const persona = (effect: Partial<Record<PersonaAxisKey, number>>) => effect;
+type LegacyPersonaAxisKey = "driver" | "scene" | "discipline" | "novelty";
+type LegacyPersonaEffect = Partial<Record<PersonaAxisKey | LegacyPersonaAxisKey, number>>;
+
+const persona = (effect: LegacyPersonaEffect): Partial<Record<PersonaAxisKey, number>> => {
+  const migrated: Record<PersonaAxisKey, number> = {
+    structure: effect.structure ?? 0,
+    restraint: effect.restraint ?? 0,
+    control: effect.control ?? 0,
+    deal: effect.deal ?? 0
+  };
+
+  const driver = effect.driver ?? 0;
+  const scene = effect.scene ?? 0;
+  const discipline = effect.discipline ?? 0;
+  const novelty = effect.novelty ?? 0;
+
+  // Legacy meaning:
+  // driver + = impulse, scene + = social, discipline + = indulgence, novelty + = try/accept risk.
+  // New meaning uses positive values for H/C/G/S and negative values for N/E/R/L.
+  migrated.restraint += driver > 0 ? -driver * 0.6 : Math.abs(driver) * 0.35;
+  migrated.control += driver < 0 ? Math.abs(driver) * 0.65 : -driver * 0.25;
+  migrated.structure += scene * 0.75;
+  migrated.restraint += discipline > 0 ? -discipline : Math.abs(discipline);
+  migrated.control += novelty > 0 ? -novelty * 0.55 : Math.abs(novelty) * 0.8;
+  migrated.restraint += novelty > 0 ? -novelty * 0.25 : 0;
+
+  const compact = Object.fromEntries(Object.entries(migrated).filter(([, value]) => Math.abs(value) >= 0.1)) as Partial<
+    Record<PersonaAxisKey, number>
+  >;
+
+  return Object.keys(compact).length > 0 ? compact : { control: 1 };
+};
 
 const choice = (
   id: string,
@@ -2272,6 +2313,66 @@ export const buildOrderContext = (entries: CartEntry[], mood: Mood): OrderContex
   };
 };
 
+export const createInitialOrderProgressScore = (context: OrderContext): DeliveryScore => {
+  const score: DeliveryScore = { ...initialOrderProgressScore };
+  const tags = new Set(context.tags);
+  const flags = context.flags;
+
+  if (flags.hasMixedTemperature) {
+    score.integrity -= 6;
+    score.safety -= 3;
+  }
+  if (flags.hasMultiCup) {
+    score.integrity -= 4;
+    score.safety -= 2;
+  }
+  if (flags.hasSoup) {
+    score.integrity -= 5;
+    score.safety -= 2;
+  }
+  if (flags.hasFried) {
+    score.integrity -= 2;
+    score.health -= 3;
+  }
+  if (flags.hasMultipleShops) {
+    score.speed -= 2;
+    score.integrity -= 3;
+    score.trust -= 1;
+  }
+  if (flags.isHighSugarOrOil) {
+    score.health -= 6;
+  }
+  if (flags.hasLightFood || tags.has("protein")) {
+    score.health += 5;
+  }
+  if (flags.hasLowSugar) {
+    score.health += 4;
+  }
+  if (flags.hasNotes) {
+    score.integrity += 2;
+    score.safety += 2;
+  }
+  if (tags.has("safe")) {
+    score.safety += 4;
+    score.integrity += 3;
+  }
+  if (tags.has("separatePack")) {
+    score.integrity += 6;
+    score.safety += 4;
+  }
+  if (tags.has("warm") || tags.has("hot")) {
+    score.integrity += 1;
+  }
+  if (flags.isOffice) {
+    score.trust -= 1;
+  }
+  if (flags.isSocial) {
+    score.trust += 2;
+  }
+
+  return normalizeOrderScore(score);
+};
+
 const eventMatchesContext = (event: OrderProgressEvent, context: OrderContext, nodeId: string) => {
   const tags = new Set(context.tags);
   const categories = new Set(context.categories);
@@ -2385,6 +2486,7 @@ export const createOrderProgressGame = ({
 }): OrderProgressGameState => {
   const context = buildOrderContext(entries, mood);
   const events = selectOrderProgressEvents(context, seed);
+  const score = createInitialOrderProgressScore(context);
   return {
     seed,
     context,
@@ -2392,7 +2494,7 @@ export const createOrderProgressGame = ({
     events,
     currentIndex: 0,
     currentEvent: events[0],
-    score: { ...initialOrderProgressScore },
+    score,
     resolvedEvents: [],
     completed: false
   };
